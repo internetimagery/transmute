@@ -1,6 +1,6 @@
 use cpython::{py_class, py_module_initializer, ObjectProtocol, PyObject, PyResult, PythonObject};
-use std::cell::RefCell;
 use search::{Graph, Int};
+use std::cell::RefCell;
 mod search;
 
 // Note transmute is name of library in Cargo.toml
@@ -20,24 +20,24 @@ py_class!(class Grimoire |py| {
         cost: Int,
         type_in: &PyObject,
         type_out: &PyObject
-    ) -> PyResult<bool> {
+    ) -> PyResult<PyObject> {
         let hash_in = type_in.hash(py)?;
         let hash_out = type_out.hash(py)?;
         self.graph(py).borrow_mut().add_edge(cost, hash_in, hash_out);
-        Ok(true)
+        Ok(py.None())
     }
     def transmute(
         &self,
         value: &PyObject,
         type_out: &PyObject,
         type_in: Option<&PyObject> = None
-    ) -> PyResult<bool> {
+    ) -> PyResult<PyObject> {
         let hash_in = match type_in {
             Some(type_override) => type_override.hash(py)?,
             None => value.get_type(py).into_object().hash(py)?
         };
         let hash_out = type_out.hash(py)?;
         self.graph(py).borrow().search(hash_in, hash_out);
-        Ok(true)
+        Ok(py.None())
     }
 });
