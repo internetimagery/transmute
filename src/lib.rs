@@ -18,8 +18,8 @@ py_class!(class Grimoire |py| {
     def inscribe_transmutation(
         &self,
         cost: Int,
-        type_in,
-        type_out
+        type_in: &PyObject,
+        type_out: &PyObject
     ) -> PyResult<bool> {
         let hash_in = type_in.hash(py)?;
         let hash_out = type_out.hash(py)?;
@@ -28,8 +28,8 @@ py_class!(class Grimoire |py| {
     }
     def transmute(
         &self,
-        value,
-        type_out,
+        value: &PyObject,
+        type_out: &PyObject,
         type_in: Option<&PyObject> = None
     ) -> PyResult<bool> {
         let hash_in = match type_in {
