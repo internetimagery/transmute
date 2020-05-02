@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 // python int
@@ -6,6 +6,7 @@ pub type Int = isize;
 
 // Representing an edge between two nodes
 // transforming from one thing to another
+#[derive(Hash, Eq, PartialEq, Debug)]
 pub struct Edge {
     cost: Int,
     hash_in: Int,
@@ -15,8 +16,8 @@ pub struct Edge {
 // Our graph!
 pub struct Graph {
     // TODO this needs to be a vector/set of Edges
-    map_in: HashMap<Int, Arc<Edge>>,
-    map_out: HashMap<Int, Arc<Edge>>,
+    map_in: HashMap<Int, HashSet<Arc<Edge>>>,
+    map_out: HashMap<Int, HashSet<Arc<Edge>>>,
 }
 
 impl Graph {
@@ -35,8 +36,10 @@ impl Graph {
             hash_in,
             hash_out,
         });
-        self.map_in.insert(hash_in, Arc::clone(&edge));
-        self.map_out.insert(hash_out, Arc::clone(&edge));
+        let edges_in = self.map_in.entry(hash_in).or_insert(HashSet::new());
+        let edges_out = self.map_out.entry(hash_in).or_insert(HashSet::new());
+        edges_in.insert(Arc::clone(&edge));
+        edges_out.insert(Arc::clone(&edge));
     }
 
     // Search the graph to find what we want to find
