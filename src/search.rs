@@ -17,15 +17,15 @@ pub struct Edge {
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
-pub struct State<'a> {
+pub struct State {
     cost: Int,
     actual_cost: Int,
-    edge: &'a Edge,
-    parent: Option<Rc<State<'a>>>,
+    edge: Arc<Edge>,
+    parent: Option<Rc<State>>,
 }
 
 struct StateIter<'a> {
-    node: Option<&'a State<'a>>,
+    node: Option<&'a State>,
 }
 
 // Our graph!
@@ -35,8 +35,8 @@ pub struct Graph {
     edges_out: HashMap<Int, HashSet<Arc<Edge>>>,
 }
 
-impl<'a> State<'a> {
-    fn new(cost: Int, edge: &'a Edge, parent: Option<Rc<State<'a>>>) -> Self {
+impl State {
+    fn new(cost: Int, edge: Arc<Edge>, parent: Option<Rc<State>>) -> Self {
         let actual_cost = edge.cost
             + match &parent {
                 Some(p) => p.cost,
@@ -55,12 +55,12 @@ impl<'a> State<'a> {
 }
 
 impl<'a> Iterator for StateIter<'a> {
-    type Item = &'a State<'a>;
+    type Item = &'a State;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(node) = self.node {
             self.node = match &node.parent {
-                Some(parent) => Some(parent.as_ref()),
+                Some(parent) => Some(parent),
                 None => None,
             };
             return Some(node);
@@ -89,23 +89,23 @@ impl Graph {
         let edges_in = self.edges_in.entry(hash_in).or_insert(HashSet::new());
         let edges_out = self.edges_out.entry(hash_out).or_insert(HashSet::new());
         edges_in.insert(Arc::clone(&edge));
-        edges_out.insert(Arc::clone(&edge));
+        edges_out.insert(edge);
     }
 
     // Search the graph to find what we want to find
-    pub fn search(&self, hash_in: Int, hash_out: Int) -> Option<Vec<Int>> {
+    pub fn search(&self, hash_in: Int, hash_out: Int) -> Option<Vec<Arc<Edge>>> {
         // Get our starting points!
         let mut queue_in: BinaryHeap<_> = match self.edges_in.get(&hash_in) {
             Some(edges) => edges
                 .iter()
-                .map(|e| Reverse(State::new(e.cost, e, None)))
+                .map(|e| Reverse(State::new(e.cost, Arc::clone(&e), None)))
                 .collect(),
             None => BinaryHeap::new(),
         };
         let mut queue_out: BinaryHeap<_> = match self.edges_out.get(&hash_out) {
             Some(edges) => edges
                 .iter()
-                .map(|e| Reverse(State::new(e.cost, e, None)))
+                .map(|e| Reverse(State::new(e.cost, Arc::clone(e), None)))
                 .collect(),
             None => BinaryHeap::new(),
         };
@@ -132,7 +132,7 @@ impl Graph {
                 }
 
                 // Mark where we have been
-                visited_in.insert(state.edge);
+                visited_in.insert(Arc::clone(&state.edge));
 
                 // Search further into the graph!
                 if let Some(edges) = self.edges_in.get(&state.edge.hash_out) {
@@ -141,7 +141,11 @@ impl Graph {
                         if visited_in.contains(edge.as_ref()) {
                             continue;
                         }
-                        queue_in.push(Reverse(State::new(1, edge, Some(Rc::clone(&state_rc)))))
+                        queue_in.push(Reverse(State::new(
+                            1,
+                            Arc::clone(edge),
+                            Some(Rc::clone(&state_rc)),
+                        )))
                     }
                 }
             } else if !queue_out.is_empty() {
@@ -156,11 +160,11 @@ impl Graph {
                 // Check if we have reached our goal
                 if state.edge.hash_in == hash_in {
                     println!("We did it!");
-                    return Some(Vec::new());
+                    return Some(state.iter().map(|s| Arc::clone(&s.edge)).collect());
                 }
 
                 // Mark where we have been
-                visited_out.insert(state.edge);
+                visited_out.insert(Arc::clone(&state.edge));
 
                 // Search further into the graph!
                 if let Some(edges) = self.edges_out.get(&state.edge.hash_in) {
@@ -169,7 +173,11 @@ impl Graph {
                         if visited_in.contains(edge.as_ref()) {
                             continue;
                         }
-                        queue_out.push(Reverse(State::new(1, edge, Some(Rc::clone(&state_rc)))))
+                        queue_out.push(Reverse(State::new(
+                            1,
+                            Arc::clone(edge),
+                            Some(Rc::clone(&state_rc)),
+                        )))
                     }
                 }
             } else {
