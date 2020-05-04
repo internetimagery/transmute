@@ -13,7 +13,7 @@ pub struct Edge {
     cost: Int,
     hash_in: Int,
     hash_out: Int,
-    hash_func: Int,
+    pub hash_func: Int,
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]

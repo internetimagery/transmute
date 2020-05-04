@@ -41,7 +41,7 @@ py_class!(class Grimoire |py| {
     }
     def transmute(
         &self,
-        value: &PyObject,
+        value: PyObject,
         type_out: &PyObject,
         type_in: Option<&PyObject> = None
     ) -> PyResult<PyObject> {
@@ -50,7 +50,15 @@ py_class!(class Grimoire |py| {
             None => value.get_type(py).into_object().hash(py)?
         };
         let hash_out = type_out.hash(py)?;
-        self.graph(py).borrow().search(hash_in, hash_out);
+        if let Some(edges) = self.graph(py).borrow().search(hash_in, hash_out) {
+            let functions = self.functions(py).borrow();
+            let mut result = value;
+            for edge in edges {
+               let func = functions.get(&edge.hash_func).expect("Function should exist");
+               result = func.call(py, (result,), None).expect("Darn an error... need that handling");
+            }
+            return Ok(result)
+        }
         Ok(py.None())
     }
 
