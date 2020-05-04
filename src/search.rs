@@ -126,8 +126,15 @@ impl Graph {
 
                 // Check if we have reached our goal
                 if state.edge.hash_out == hash_out {
-                    println!("We did it!");
-                    return Some(Vec::new());
+                    return Some(
+                        state
+                            .iter()
+                            .map(|s| *s.edge)
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                            .rev()
+                            .collect(),
+                    );
                 }
 
                 // Mark where we have been
