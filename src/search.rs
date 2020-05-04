@@ -142,12 +142,20 @@ impl Graph {
 
                 // Search further into the graph!
                 if let Some(edges) = self.edges_in.get(&state.edge.hash_out) {
+                    let parent_cost = match &state.parent {
+                        Some(parent) => parent.cost,
+                        None => 0,
+                    };
                     let state_rc = Rc::new(state);
                     for edge in edges {
                         if visited_in.contains(&edge) {
                             continue;
                         }
-                        queue_in.push(Reverse(State::new(1, &edge, Some(Rc::clone(&state_rc)))))
+                        queue_in.push(Reverse(State::new(
+                            edge.cost + parent_cost,
+                            &edge,
+                            Some(Rc::clone(&state_rc)),
+                        )))
                     }
                 }
             } else if !queue_out.is_empty() {
@@ -169,12 +177,20 @@ impl Graph {
 
                 // Search further into the graph!
                 if let Some(edges) = self.edges_out.get(&state.edge.hash_in) {
+                    let parent_cost = match &state.parent {
+                        Some(parent) => parent.cost,
+                        None => 0,
+                    };
                     let state_rc = Rc::new(state);
                     for edge in edges {
                         if visited_in.contains(&edge) {
                             continue;
                         }
-                        queue_out.push(Reverse(State::new(1, &edge, Some(Rc::clone(&state_rc)))))
+                        queue_out.push(Reverse(State::new(
+                            edge.cost + parent_cost,
+                            &edge,
+                            Some(Rc::clone(&state_rc)),
+                        )))
                     }
                 }
             } else {
