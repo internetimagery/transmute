@@ -27,9 +27,26 @@ struct StateIter<'a> {
     node: Option<&'a State<'a>>,
 }
 
+struct Searcher<'a> {
+    // what we have
+    edges_in: &'a HashMap<Int, HashSet<Edge>>,
+    edges_out: &'a HashMap<Int, HashSet<Edge>>,
+
+    // what we want to find
+    hash_in: Int,
+    hash_out: Int,
+
+    // our search queue
+    queue_in: BinaryHeap<Reverse<State<'a>>>,
+    queue_out: BinaryHeap<Reverse<State<'a>>>,
+
+    // track where we have been
+    visited_in: HashSet<&'a Edge>,
+    visited_out: HashSet<&'a Edge>,
+}
+
 // Our graph!
 pub struct Graph {
-    // TODO this needs to be a vector/set of Edges
     edges_in: HashMap<Int, HashSet<Edge>>,
     edges_out: HashMap<Int, HashSet<Edge>>,
 }
@@ -68,6 +85,135 @@ impl<'a> Iterator for StateIter<'a> {
     }
 }
 
+impl<'a> Searcher<'a> {
+    fn new(
+        hash_in: Int,
+        hash_out: Int,
+        edges_in: &'a HashMap<Int, HashSet<Edge>>,
+        edges_out: &'a HashMap<Int, HashSet<Edge>>,
+    ) -> Self {
+        Searcher {
+            edges_in,
+            edges_out,
+            hash_in,
+            hash_out,
+            queue_in: BinaryHeap::new(),
+            queue_out: BinaryHeap::new(),
+            visited_in: HashSet::new(),
+            visited_out: HashSet::new(),
+        }
+    }
+
+    fn search(&mut self) -> Option<Vec<Edge>> {
+        self.set_queue_in();
+        self.set_queue_out();
+
+        loop {
+            if !self.queue_in.is_empty() && self.queue_in.len() < self.queue_out.len() {
+                if let Some(result) = self.search_forward() {
+                    return Some(result);
+                }
+            } else if !self.queue_out.is_empty() {
+                if let Some(result) = self.search_backward() {
+                    return Some(result);
+                }
+            } else {
+                break;
+            }
+        }
+        None
+    }
+
+    fn search_forward(&mut self) -> Option<Vec<Edge>> {
+        // next state
+        let state = match self.queue_in.pop() {
+            Some(Reverse(s)) => s,
+            _ => return None,
+        };
+
+        // Check if we have reached our goal
+        if state.edge.hash_out == self.hash_out {
+            return Some(
+                state
+                    .iter()
+                    .map(|s| *s.edge)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect(),
+            );
+        }
+
+        // Mark where we have been
+        self.visited_in.insert(state.edge);
+
+        // Search further into the graph!
+        if let Some(edges) = self.edges_in.get(&state.edge.hash_out) {
+            let state_rc = Rc::new(state);
+            for edge in edges {
+                if self.visited_in.contains(&edge) {
+                    continue;
+                }
+                self.queue_in.push(Reverse(State::new(
+                    edge.cost + state_rc.cost,
+                    &edge,
+                    Some(Rc::clone(&state_rc)),
+                )))
+            }
+        }
+        None
+    }
+
+    fn search_backward(&mut self) -> Option<Vec<Edge>> {
+        let state = match self.queue_out.pop() {
+            Some(Reverse(s)) => s,
+            _ => return None,
+        };
+
+        // Check if we have reached our goal
+        if state.edge.hash_in == self.hash_in {
+            return Some(state.iter().map(|s| *s.edge).collect());
+        }
+
+        // Mark where we have been
+        self.visited_out.insert(state.edge);
+
+        // Search further into the graph!
+        if let Some(edges) = self.edges_out.get(&state.edge.hash_in) {
+            let state_rc = Rc::new(state);
+            for edge in edges {
+                if self.visited_in.contains(&edge) {
+                    continue;
+                }
+                self.queue_out.push(Reverse(State::new(
+                    edge.cost + state_rc.cost,
+                    &edge,
+                    Some(Rc::clone(&state_rc)),
+                )))
+            }
+        }
+        None
+    }
+
+    fn set_queue_in(&mut self) {
+        if let Some(edges) = self.edges_in.get(&self.hash_in) {
+            for edge in edges {
+                self.queue_in
+                    .push(Reverse(State::new(edge.cost, &edge, None)))
+            }
+        }
+    }
+
+    fn set_queue_out(&mut self) {
+        if let Some(edges) = self.edges_out.get(&self.hash_out) {
+            for edge in edges {
+                self.queue_out
+                    .push(Reverse(State::new(edge.cost, &edge, None)))
+            }
+        }
+    }
+}
+
 impl Graph {
     // Create a new graph
     pub fn new() -> Self {
@@ -93,111 +239,7 @@ impl Graph {
 
     // Search the graph to find what we want to find
     pub fn search(&self, hash_in: Int, hash_out: Int) -> Option<Vec<Edge>> {
-        // Get our starting points!
-        let mut queue_in: BinaryHeap<_> = match self.edges_in.get(&hash_in) {
-            Some(edges) => edges
-                .iter()
-                .map(|e| Reverse(State::new(e.cost, &e, None)))
-                .collect(),
-            None => BinaryHeap::new(),
-        };
-        let mut queue_out: BinaryHeap<_> = match self.edges_out.get(&hash_out) {
-            Some(edges) => edges
-                .iter()
-                .map(|e| Reverse(State::new(e.cost, &e, None)))
-                .collect(),
-            None => BinaryHeap::new(),
-        };
-
-        // Track where we have been
-        let mut visited_in = HashSet::new();
-        let mut visited_out = HashSet::new();
-
-        // Search our graph!
-        loop {
-            if !queue_in.is_empty() && queue_in.len() < queue_out.len() {
-                // //////////////// //
-                // Search forwards! //
-                // //////////////// //
-                let state = match queue_in.pop() {
-                    Some(Reverse(s)) => s,
-                    _ => continue,
-                };
-
-                // Check if we have reached our goal
-                if state.edge.hash_out == hash_out {
-                    return Some(
-                        state
-                            .iter()
-                            .map(|s| *s.edge)
-                            .collect::<Vec<_>>()
-                            .into_iter()
-                            .rev()
-                            .collect(),
-                    );
-                }
-
-                // Mark where we have been
-                visited_in.insert(state.edge);
-
-                // Search further into the graph!
-                if let Some(edges) = self.edges_in.get(&state.edge.hash_out) {
-                    let parent_cost = match &state.parent {
-                        Some(parent) => parent.cost,
-                        None => 0,
-                    };
-                    let state_rc = Rc::new(state);
-                    for edge in edges {
-                        if visited_in.contains(&edge) {
-                            continue;
-                        }
-                        queue_in.push(Reverse(State::new(
-                            edge.cost + parent_cost,
-                            &edge,
-                            Some(Rc::clone(&state_rc)),
-                        )))
-                    }
-                }
-            } else if !queue_out.is_empty() {
-                // ///////////////// //
-                // Search backwards! //
-                // ///////////////// //
-                let state = match queue_out.pop() {
-                    Some(Reverse(s)) => s,
-                    _ => continue,
-                };
-
-                // Check if we have reached our goal
-                if state.edge.hash_in == hash_in {
-                    return Some(state.iter().map(|s| *s.edge).collect());
-                }
-
-                // Mark where we have been
-                visited_out.insert(state.edge);
-
-                // Search further into the graph!
-                if let Some(edges) = self.edges_out.get(&state.edge.hash_in) {
-                    let parent_cost = match &state.parent {
-                        Some(parent) => parent.cost,
-                        None => 0,
-                    };
-                    let state_rc = Rc::new(state);
-                    for edge in edges {
-                        if visited_in.contains(&edge) {
-                            continue;
-                        }
-                        queue_out.push(Reverse(State::new(
-                            edge.cost + parent_cost,
-                            &edge,
-                            Some(Rc::clone(&state_rc)),
-                        )))
-                    }
-                }
-            } else {
-                break;
-            }
-        }
-        println!("Queue is empty");
-        None
+        let mut searcher = Searcher::new(hash_in, hash_out, &self.edges_in, &self.edges_out);
+        searcher.search()
     }
 }
