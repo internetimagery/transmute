@@ -24,7 +24,35 @@ py_class!(class Grimoire |py| {
         )
     }
 
-    /// transmutation docstring here
+    /// Write a function into the grimoire so it may be used as a piece in the transmutation chain later.
+    /// Eventually a transmutation chain will consist of a number of these placed back to back.
+    /// So the simpler and smaller the transmutation the better.
+
+    /// Args:
+    ///     cost:
+    ///         A number representing how much work this transmuter needs to do.
+    ///         Lower numbers are prioritized.
+    ///         eg: just getting an attribute would be a low number. Accessing an http service would be higher etc
+    ///     type_in:
+    ///         Type of input expected.
+    ///         Typically a class type, but can be anything hashable that is relevant to a workflow.
+    ///         eg str / MyClass or a composite type eg frozenset([Type1, Type2])
+    ///     variations_in:
+    ///         A sequence of hashable "tags" further describing the input type.
+    ///         For the node to be used, all these variations are required (dependencies).
+    ///         This is useful if the more simple type is not enough by itself.
+    ///         eg: str (can be path/href/name/any concept)
+    ///     type_out:
+    ///         Same as "type_in", but representing the output of the transmutation.
+    ///         NOTE: it is important the transmuter only outputs the stated type (eg no None option)
+    ///     variations_out:
+    ///         Same as "variations_in" except that variations are descriptive and not dependencies.
+    ///         They can satisfy dependencies for transmuters further down the chain.
+    ///     function:
+    ///         The transmuter itself. Take a single input, produce a single output.
+    ///         It is important that only an simple transmutation is made, and that any deviation is raised as an Error.
+    ///         eg: maybe some attribute is not available and usually you'd return None. There is no strict type
+    ///         checking here, so raise an error and bail instead.
     def inscribe_transmutation(
         &self,
         cost: Int,
@@ -44,7 +72,29 @@ py_class!(class Grimoire |py| {
         Ok(py.None())
     }
 
-    /// transmute docstring here
+    /// From a given type, attempt to produce a requested type.
+    /// OR from some given data, attempt to traverse links to get the requested data.
+
+    /// Args:
+    ///     value: The input you have going into the process. This can be anything.
+    ///     type_want:
+    ///         The type you want to recieve. A chain of transmuters will be produced
+    ///         attempting to attain this type.
+    ///     variations_want:
+    ///         A sequence of variations further describing the type you wish to attain.
+    ///         This is optional but can help guide a transmutation through more complex types.
+    ///     type_have:
+    ///         An optional override for the starting type.
+    ///         If not provided the type of the value is taken instead.
+    ///     variations_have:
+    ///         Optionally include any extra variations to the input.
+    ///         If context is known but hard to detect this can help direct a more complex
+    ///         transmutation.
+    ///     explicit:
+    ///         If this is True, the variations_have attribute will entirely override
+    ///         any detected tags. Use this if the detection is bad and you know EXACTLY what you need.
+    /// Returns:
+    ///     Any: Whatever the result requested happens to be
     def transmute(
         &self,
         value: PyObject,
