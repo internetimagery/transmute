@@ -23,11 +23,15 @@ py_class!(class Grimoire |py| {
             RefCell::new(HashMap::new()),
         )
     }
+
+    /// transmutation docstring here
     def inscribe_transmutation(
         &self,
         cost: Int,
         type_in: &PyObject,
+        variations_in: &PyObject,
         type_out: &PyObject,
+        variations_out: &PyObject,
         function: PyObject
     ) -> PyResult<PyObject> {
         let hash_in = type_in.hash(py)?;
@@ -39,11 +43,16 @@ py_class!(class Grimoire |py| {
         self.graph(py).borrow_mut().add_edge(cost, hash_in, hash_out, hash_func);
         Ok(py.None())
     }
+
+    /// transmute docstring here
     def transmute(
         &self,
         value: PyObject,
         type_out: &PyObject,
-        type_in: Option<&PyObject> = None
+        variations_out: Option<&PyObject> = None,
+        type_in: Option<&PyObject> = None,
+        variations_in: Option<&PyObject> = None,
+        explicit: Option<bool> = None
     ) -> PyResult<PyObject> {
         let hash_in = match type_in {
             Some(type_override) => type_override.hash(py)?,
