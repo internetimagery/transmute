@@ -1,5 +1,6 @@
 use cpython::{
-    py_class, py_module_initializer, ObjectProtocol, PyDrop, PyObject, PyResult, PythonObject,
+    py_class, py_module_initializer, ObjectProtocol, PyDrop, PyObject, PyResult, PySequence,
+    PythonObject,
 };
 use search::{Graph, Int};
 use std::cell::RefCell;
@@ -27,7 +28,7 @@ py_class!(class Grimoire |py| {
     /// Write a function into the grimoire so it may be used as a piece in the transmutation chain later.
     /// Eventually a transmutation chain will consist of a number of these placed back to back.
     /// So the simpler and smaller the transmutation the better.
-
+    ///
     /// Args:
     ///     cost:
     ///         A number representing how much work this transmuter needs to do.
@@ -44,7 +45,8 @@ py_class!(class Grimoire |py| {
     ///         eg: str (can be path/href/name/any concept)
     ///     type_out:
     ///         Same as "type_in", but representing the output of the transmutation.
-    ///         NOTE: it is important the transmuter only outputs the stated type (eg no None option)
+    ///         NOTE: it is important the transmuter only outputs the stated type (eg error if
+    ///         otherwise it'd return None)
     ///     variations_out:
     ///         Same as "variations_in" except that variations are descriptive and not dependencies.
     ///         They can satisfy dependencies for transmuters further down the chain.
@@ -57,24 +59,29 @@ py_class!(class Grimoire |py| {
         &self,
         cost: Int,
         type_in: &PyObject,
-        variations_in: &PyObject,
+        variations_in: &PySequence,
         type_out: &PyObject,
-        variations_out: &PyObject,
+        variations_out: &PySequence,
         function: PyObject
     ) -> PyResult<PyObject> {
         let hash_in = type_in.hash(py)?;
         let hash_out = type_out.hash(py)?;
         let hash_func = function.hash(py)?;
+        let hash_var_in = variations_in.iter(py)?
+            .filter_map(|v| match v {
+                Ok(v) => v.hash(py).ok(),
+                _ => None,
+            }).collect();
         // Store a reference to the python object in this outer layer
         // but refer to it via its hash.
         self.functions(py).borrow_mut().insert(hash_func, function);
-        self.graph(py).borrow_mut().add_edge(cost, hash_in, hash_out, hash_func);
+        self.graph(py).borrow_mut().add_edge(cost, hash_in, hash_var_in, hash_out, hash_func);
         Ok(py.None())
     }
 
     /// From a given type, attempt to produce a requested type.
     /// OR from some given data, attempt to traverse links to get the requested data.
-
+    ///
     /// Args:
     ///     value: The input you have going into the process. This can be anything.
     ///     type_want:
@@ -98,17 +105,17 @@ py_class!(class Grimoire |py| {
     def transmute(
         &self,
         value: PyObject,
-        type_out: &PyObject,
-        variations_out: Option<&PyObject> = None,
-        type_in: Option<&PyObject> = None,
-        variations_in: Option<&PyObject> = None,
-        explicit: Option<bool> = None
+        type_want: &PyObject,
+        variations_want: Option<&PySequence> = None,
+        type_have: Option<&PyObject> = None,
+        variations_have: Option<&PySequence> = None,
+        explicit: bool = false
     ) -> PyResult<PyObject> {
-        let hash_in = match type_in {
+        let hash_in = match type_have {
             Some(type_override) => type_override.hash(py)?,
             None => value.get_type(py).into_object().hash(py)?
         };
-        let hash_out = type_out.hash(py)?;
+        let hash_out = type_want.hash(py)?;
         if let Some(edges) = self.graph(py).borrow().search(hash_in, hash_out) {
             let functions = self.functions(py).borrow();
             let mut result = value;
