@@ -48,8 +48,8 @@ struct Searcher<'a> {
     queue_out: BinaryHeap<Reverse<Rc<State<'a>>>>,
 
     // track where we have been
-    visited_in: HashMap<&'a Arc<Edge>, Rc<State<'a>>>,
-    visited_out: HashMap<&'a Arc<Edge>, Rc<State<'a>>>,
+    visited_in: HashMap<&'a Arc<Edge>, HashMap<&'a Variations, Rc<State<'a>>>>,
+    visited_out: HashMap<&'a Arc<Edge>, HashMap<&'a Variations, Rc<State<'a>>>>,
 }
 
 // Our graph!
@@ -162,23 +162,32 @@ impl<'a> Searcher<'a> {
         }
 
         // Check if our path intersects the forward search
-        if let Some(opposite_state) = self.visited_out.get(&state.edge) {
-            // TODO: Dependency check
-            return Some(
-                state
-                    .iter()
-                    .skip(1)
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .rev()
-                    .chain(opposite_state.iter())
-                    .map(|s| Arc::clone(&s.edge))
-                    .collect(),
-            );
+        if let Some(opposite_states) = self.visited_out.get(&state.edge) {
+            for opposite_state in opposite_states.values() {
+                // TODO: Dependency check
+                return Some(
+                    state
+                        .iter()
+                        .skip(1)
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .rev()
+                        .chain(opposite_state.iter())
+                        .map(|s| Arc::clone(&s.edge))
+                        .collect(),
+                );
+            }
         }
 
         // Mark where we have been
-        self.visited_in.insert(state.edge, Rc::clone(&state));
+        let edge_entry = self.visited_in.entry(state.edge).or_insert(HashMap::new());
+        edge_entry.insert(
+            match &state.parent {
+                Some(parent) => &parent.variations,
+                None => self.hash_var_in,
+            },
+            Rc::clone(&state),
+        );
         self.add_queue_in(state);
         None
     }
@@ -195,23 +204,33 @@ impl<'a> Searcher<'a> {
         }
 
         // Check if our path intersects the forward search
-        if let Some(opposite_state) = self.visited_in.get(&state.edge) {
-            // TODO: Dependency check
-            return Some(
-                opposite_state
-                    .iter()
-                    .skip(1)
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .rev()
-                    .chain(state.iter())
-                    .map(|s| Arc::clone(&s.edge))
-                    .collect(),
-            );
+        if let Some(opposite_states) = self.visited_in.get(&state.edge) {
+            for opposite_state in opposite_states.values() {
+                // TODO: Dependency check
+                return Some(
+                    opposite_state
+                        .iter()
+                        .skip(1)
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .rev()
+                        .chain(state.iter())
+                        .map(|s| Arc::clone(&s.edge))
+                        .collect(),
+                );
+            }
         }
 
         // Mark where we have been
-        self.visited_out.insert(state.edge, Rc::clone(&state));
+        let edge_entry = self.visited_out.entry(state.edge).or_insert(HashMap::new());
+        edge_entry.insert(
+            match &state.parent {
+                Some(parent) => &parent.variations,
+                None => self.hash_var_out,
+            },
+            Rc::clone(&state),
+        );
+
         self.add_queue_out(state);
         None
     }
