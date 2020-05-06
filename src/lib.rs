@@ -4,8 +4,20 @@ use cpython::{
 };
 use search::{Graph, Int};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 mod search;
+
+// Simple utility, make a hash set out of python sequence
+macro_rules! hash_seq {
+    ($py:expr, $seq:expr) => {
+        $seq.iter($py)?
+            .filter_map(|v| match v {
+                Ok(v) => v.hash($py).ok(),
+                _ => None,
+            })
+            .collect()
+    };
+}
 
 // Note transmute is name of library in Cargo.toml
 py_module_initializer!(transmute, |py, m| {
@@ -67,15 +79,13 @@ py_class!(class Grimoire |py| {
         let hash_in = type_in.hash(py)?;
         let hash_out = type_out.hash(py)?;
         let hash_func = function.hash(py)?;
-        let hash_var_in = variations_in.iter(py)?
-            .filter_map(|v| match v {
-                Ok(v) => v.hash(py).ok(),
-                _ => None,
-            }).collect();
+        let hash_var_in = hash_seq!(py, variations_in);
+        let hash_var_out = hash_seq!(py, variations_out);
+
         // Store a reference to the python object in this outer layer
         // but refer to it via its hash.
         self.functions(py).borrow_mut().insert(hash_func, function);
-        self.graph(py).borrow_mut().add_edge(cost, hash_in, hash_var_in, hash_out, hash_func);
+        self.graph(py).borrow_mut().add_edge(cost, hash_in, hash_var_in, hash_out, hash_var_out, hash_func);
         Ok(py.None())
     }
 
@@ -116,7 +126,17 @@ py_class!(class Grimoire |py| {
             None => value.get_type(py).into_object().hash(py)?
         };
         let hash_out = type_want.hash(py)?;
-        if let Some(edges) = self.graph(py).borrow().search(hash_in, hash_out) {
+        let hash_var_out = match variations_want {
+            Some(vars) => hash_seq!(py, vars),
+            None => BTreeSet::new(),
+        };
+        // TODO: handle explicit option when detection is provided
+        let hash_var_in = match variations_have {
+            Some(vars) => hash_seq!(py, vars),
+            None => BTreeSet::new(),
+        };
+
+        if let Some(edges) = self.graph(py).borrow().search(hash_in, &hash_var_in, hash_out, &hash_var_out) {
             let functions = self.functions(py).borrow();
             let mut result = value;
             for edge in edges {

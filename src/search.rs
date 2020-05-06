@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 // python int
 pub type Int = isize;
+pub type Variations = BTreeSet<Int>;
 
 // Representing an edge between two nodes
 // transforming from one thing to another
@@ -14,7 +15,8 @@ pub struct Edge {
     hash_in: Int,
     hash_out: Int,
     pub hash_func: Int,
-    hash_var_in: BTreeSet<Int>,
+    hash_var_in: Variations,
+    hash_var_out: Variations,
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
@@ -23,6 +25,7 @@ pub struct State<'a> {
     actual_cost: Int,
     edge: &'a Arc<Edge>,
     parent: Option<Rc<State<'a>>>,
+    variations: Variations,
 }
 
 struct StateIter<'a> {
@@ -37,6 +40,8 @@ struct Searcher<'a> {
     // what we want to find
     hash_in: Int,
     hash_out: Int,
+    hash_var_in: &'a Variations,
+    hash_var_out: &'a Variations,
 
     // our search queue
     queue_in: BinaryHeap<Reverse<Rc<State<'a>>>>,
@@ -54,7 +59,12 @@ pub struct Graph {
 }
 
 impl<'a> State<'a> {
-    fn new(cost: Int, edge: &'a Arc<Edge>, parent: Option<Rc<State<'a>>>) -> Self {
+    fn new(
+        cost: Int,
+        edge: &'a Arc<Edge>,
+        parent: Option<Rc<State<'a>>>,
+        variations: Variations,
+    ) -> Self {
         let actual_cost = edge.cost
             + match &parent {
                 Some(p) => p.cost,
@@ -65,6 +75,7 @@ impl<'a> State<'a> {
             actual_cost,
             edge,
             parent,
+            variations,
         }
     }
     fn iter(&self) -> StateIter {
@@ -90,7 +101,9 @@ impl<'a> Iterator for StateIter<'a> {
 impl<'a> Searcher<'a> {
     fn new(
         hash_in: Int,
+        hash_var_in: &'a Variations,
         hash_out: Int,
+        hash_var_out: &'a Variations,
         edges_in: &'a HashMap<Int, HashSet<Arc<Edge>>>,
         edges_out: &'a HashMap<Int, HashSet<Arc<Edge>>>,
     ) -> Self {
@@ -99,6 +112,8 @@ impl<'a> Searcher<'a> {
             edges_out,
             hash_in,
             hash_out,
+            hash_var_in,
+            hash_var_out,
             queue_in: BinaryHeap::new(),
             queue_out: BinaryHeap::new(),
             visited_in: HashMap::new(),
@@ -133,8 +148,8 @@ impl<'a> Searcher<'a> {
             _ => return None,
         };
 
-        // Check if we have reached our goal
-        if state.edge.hash_out == self.hash_out {
+        // Check if we have reached our goal and variations are all met
+        if state.edge.hash_out == self.hash_out && state.variations.is_superset(self.hash_var_out) {
             return Some(
                 state
                     .iter()
@@ -148,6 +163,7 @@ impl<'a> Searcher<'a> {
 
         // Check if our path intersects the forward search
         if let Some(opposite_state) = self.visited_out.get(&state.edge) {
+            // TODO: Dependency check
             return Some(
                 state
                     .iter()
@@ -163,20 +179,7 @@ impl<'a> Searcher<'a> {
 
         // Mark where we have been
         self.visited_in.insert(state.edge, Rc::clone(&state));
-
-        // Search further into the graph!
-        if let Some(edges) = self.edges_in.get(&state.edge.hash_out) {
-            for edge in edges {
-                if self.visited_in.contains_key(&edge) {
-                    continue;
-                }
-                self.queue_in.push(Reverse(Rc::new(State::new(
-                    edge.cost + state.cost,
-                    &edge,
-                    Some(Rc::clone(&state)),
-                ))))
-            }
-        }
+        self.add_queue_in(state);
         None
     }
 
@@ -186,13 +189,14 @@ impl<'a> Searcher<'a> {
             _ => return None,
         };
 
-        // Check if we have reached our goal
-        if state.edge.hash_in == self.hash_in {
+        // Check if we have reached our goal and variations dependencies are met
+        if state.edge.hash_in == self.hash_in && state.variations.is_superset(self.hash_var_in) {
             return Some(state.iter().map(|s| Arc::clone(&s.edge)).collect());
         }
 
         // Check if our path intersects the forward search
         if let Some(opposite_state) = self.visited_in.get(&state.edge) {
+            // TODO: Dependency check
             return Some(
                 opposite_state
                     .iter()
@@ -208,28 +212,23 @@ impl<'a> Searcher<'a> {
 
         // Mark where we have been
         self.visited_out.insert(state.edge, Rc::clone(&state));
-
-        // Search further into the graph!
-        if let Some(edges) = self.edges_out.get(&state.edge.hash_in) {
-            for edge in edges {
-                if self.visited_in.contains_key(&edge) {
-                    continue;
-                }
-                self.queue_out.push(Reverse(Rc::new(State::new(
-                    edge.cost + state.cost,
-                    &edge,
-                    Some(Rc::clone(&state)),
-                ))))
-            }
-        }
+        self.add_queue_out(state);
         None
     }
 
     fn set_queue_in(&mut self) {
         if let Some(edges) = self.edges_in.get(&self.hash_in) {
             for edge in edges {
-                self.queue_in
-                    .push(Reverse(Rc::new(State::new(edge.cost, &edge, None))))
+                // Variation requirement check
+                if !edge.hash_var_in.is_subset(self.hash_var_in) {
+                    continue;
+                }
+                self.queue_in.push(Reverse(Rc::new(State::new(
+                    edge.cost / (edge.hash_var_in.len() + 1) as Int,
+                    &edge,
+                    None,
+                    &(self.hash_var_in - &edge.hash_var_in) | &edge.hash_var_out,
+                ))))
             }
         }
     }
@@ -237,8 +236,59 @@ impl<'a> Searcher<'a> {
     fn set_queue_out(&mut self) {
         if let Some(edges) = self.edges_out.get(&self.hash_out) {
             for edge in edges {
-                self.queue_out
-                    .push(Reverse(Rc::new(State::new(edge.cost, &edge, None))))
+                self.queue_out.push(Reverse(Rc::new(State::new(
+                    edge.cost
+                        / (self.hash_var_out.intersection(&edge.hash_var_out).count() + 1) as Int,
+                    &edge,
+                    None,
+                    &(self.hash_var_out - &edge.hash_var_out) | &edge.hash_var_in,
+                ))))
+            }
+        }
+    }
+
+    fn add_queue_in(&mut self, state: Rc<State<'a>>) {
+        if let Some(edges) = self.edges_in.get(&state.edge.hash_out) {
+            for edge in edges {
+                // TODO: compare against variations too
+                if self.visited_in.contains_key(&edge) {
+                    continue;
+                }
+                // Variation dependency check
+                if !edge.hash_var_in.is_subset(&state.variations) {
+                    continue;
+                }
+                self.queue_in.push(Reverse(Rc::new(State::new(
+                    state.cost + edge.cost / (edge.hash_var_in.len() + 1) as Int,
+                    &edge,
+                    Some(Rc::clone(&state)),
+                    &(&state.variations - &edge.hash_var_in) | &edge.hash_var_out,
+                ))));
+            }
+        }
+    }
+
+    fn add_queue_out(&mut self, state: Rc<State<'a>>) {
+        // Search further into the graph!
+        if let Some(edges) = self.edges_out.get(&state.edge.hash_in) {
+            for edge in edges {
+                // TODO: compare with variations as well
+                if self.visited_in.contains_key(&edge) {
+                    continue;
+                }
+                // Check dependencies
+                if !edge.hash_var_out.is_subset(&state.variations) {
+                    continue;
+                }
+                self.queue_out.push(Reverse(Rc::new(State::new(
+                    state.cost
+                        + edge.cost
+                            / (edge.hash_var_out.intersection(&state.variations).count() + 1)
+                                as Int,
+                    &edge,
+                    Some(Rc::clone(&state)),
+                    &(&state.variations - &edge.hash_var_out) | &edge.hash_var_in,
+                ))));
             }
         }
     }
@@ -258,8 +308,9 @@ impl Graph {
         &mut self,
         cost: Int,
         hash_in: Int,
-        hash_var_in: BTreeSet<Int>,
+        hash_var_in: Variations,
         hash_out: Int,
+        hash_var_out: Variations,
         hash_func: Int,
     ) {
         let edge_arc = Arc::new(Edge {
@@ -268,6 +319,7 @@ impl Graph {
             hash_out,
             hash_func,
             hash_var_in,
+            hash_var_out,
         });
         let edges_in = self.edges_in.entry(hash_in).or_insert(HashSet::new());
         let edges_out = self.edges_out.entry(hash_out).or_insert(HashSet::new());
@@ -276,8 +328,21 @@ impl Graph {
     }
 
     // Search the graph to find what we want to find
-    pub fn search(&self, hash_in: Int, hash_out: Int) -> Option<Vec<Arc<Edge>>> {
-        let mut searcher = Searcher::new(hash_in, hash_out, &self.edges_in, &self.edges_out);
+    pub fn search(
+        &self,
+        hash_in: Int,
+        hash_var_in: &Variations,
+        hash_out: Int,
+        hash_var_out: &Variations,
+    ) -> Option<Vec<Arc<Edge>>> {
+        let mut searcher = Searcher::new(
+            hash_in,
+            hash_var_in,
+            hash_out,
+            hash_var_out,
+            &self.edges_in,
+            &self.edges_out,
+        );
         searcher.search()
     }
 }
