@@ -23,9 +23,20 @@ macro_rules! hash_seq {
 // MODULE SETUP
 // Note transmute is name of library in Cargo.toml
 py_module_initializer!(transmute, |py, m| {
-    m.add(py, "__doc__", "Transmutation!")?;
+    m.add(py, "__doc__", "Simple network housing a collection of equally simple \"a to b\" functions.
+        Providing the ability to chain a bunch of them together for more complex transmutations.
+
+        You could be wanting to transmute between a chain of types, or traverse a bunch of object oriented links.
+        If you're often thinking \"I have this, how can I get that\", then this type of solution could help.
+
+        >>> grimoire = Grimoire()
+        >>> grimoire.inscribe_transmutation(1, str, [\"href\"], WebPage, [], load_webpage)
+        >>> grimoire.inscribe_detector(str, http_detector)
+        >>> grimoire.transmute(\"http://somewhere.html\", WebPage)
+    ")?;
     m.add(py, "TransmuteError", py.get_type::<TransmuteError>())?;
     m.add(py, "NoChainError", py.get_type::<NoChainError>())?;
+    m.add(py, "ExecutionError", py.get_type::<ExecutionError>())?;
     m.add_class::<Grimoire>(py)?;
     Ok(())
 });
@@ -35,6 +46,7 @@ py_module_initializer!(transmute, |py, m| {
 // Exceptions
 py_exception!(transmute, TransmuteError); // Root exception
 py_exception!(transmute, NoChainError, TransmuteError);
+py_exception!(transmute, ExecutionError, TransmuteError);
 //////////////////////////////////////////////////
 
 py_class!(class Grimoire |py| {
