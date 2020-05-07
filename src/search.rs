@@ -316,6 +316,10 @@ impl<'a> Searcher<'a> {
                     continue;
                 }
                 // Variation dependency check
+                // Any node visited walking forward needs all its
+                // variations to be provided. By the current node and
+                // all nodes that came before (unless they already
+                // consumed some)
                 if !edge.hash_var_in.is_subset(&state.variations) {
                     continue;
                 }
@@ -341,9 +345,14 @@ impl<'a> Searcher<'a> {
                     continue;
                 }
                 // Check dependencies
-                if !edge.hash_var_out.is_subset(&state.variations) {
-                    continue;
-                }
+                //if !edge.hash_var_out.is_subset(&state.variations) {
+                // TODO: check if this dependency check is needed.
+                // The output could potentially provide more than we need.
+                // It also doesn't have to produce all the variations
+                // we need by itself. More could come from nodes we haven't
+                // visited yet.
+                //    continue;
+                //}
                 self.queue_out.push(Reverse(Rc::new(State::new(
                     state.cost
                         + edge.cost
