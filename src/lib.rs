@@ -1,6 +1,6 @@
 use cpython::{
-    py_class, py_module_initializer, ObjectProtocol, PyDrop, PyObject, PyResult, PySequence,
-    PythonObject,
+    py_class, py_exception, py_module_initializer, ObjectProtocol, PyDrop, PyErr, PyObject,
+    PyResult, PySequence, PythonObject,
 };
 use search::{Graph, Int};
 use std::cell::RefCell;
@@ -19,12 +19,23 @@ macro_rules! hash_seq {
     };
 }
 
+//////////////////////////////////////////////////
+// MODULE SETUP
 // Note transmute is name of library in Cargo.toml
 py_module_initializer!(transmute, |py, m| {
     m.add(py, "__doc__", "Transmutation!")?;
+    m.add(py, "TransmuteError", py.get_type::<TransmuteError>())?;
+    m.add(py, "NoChainError", py.get_type::<NoChainError>())?;
     m.add_class::<Grimoire>(py)?;
     Ok(())
 });
+//////////////////////////////////////////////////
+
+//////////////////////////////////////////////////
+// Exceptions
+py_exception!(transmute, TransmuteError); // Root exception
+py_exception!(transmute, NoChainError, TransmuteError);
+//////////////////////////////////////////////////
 
 py_class!(class Grimoire |py| {
     data graph: RefCell<Graph>;
@@ -136,16 +147,24 @@ py_class!(class Grimoire |py| {
             None => BTreeSet::new(),
         };
 
-        if let Some(edges) = self.graph(py).borrow().search(hash_in, &hash_var_in, hash_out, &hash_var_out) {
-            let functions = self.functions(py).borrow();
-            let mut result = value;
-            for edge in edges {
-               let func = functions.get(&edge.hash_func).expect("Function should exist");
-               result = func.call(py, (result,), None).expect("Darn an error... need that handling");
+        // Retry a few times, if something breaks along the way.
+        // Collect errors.
+        // If we run out of paths to take or run out of reties,
+        // and there are still errors. Raise with info from all of them.
+        let skip_edges = BTreeSet::new();
+        for _ in 0..10 {
+            if let Some(edges) = self.graph(py).borrow().search(hash_in, &hash_var_in, hash_out, &hash_var_out, &skip_edges) {
+                let functions = self.functions(py).borrow();
+                let mut result = value;
+                for edge in edges {
+                    let func = functions.get(&edge.hash_func).expect("Function should exist");
+                    result = func.call(py, (result,), None)?
+                }
+                return Ok(result)
             }
-            return Ok(result)
         }
-        Ok(py.None())
+        // TODO: concat errors here, and include in error message (and type)
+        Err(PyErr::new::<NoChainError, _>(py, "Could not do it"))
     }
 
     ///////////////////////////////////////////////////////////////

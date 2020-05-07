@@ -2,7 +2,7 @@ import unittest
 import sys, itertools
 
 sys.path.append("target/release")
-from transmute import Grimoire
+from transmute import Grimoire, NoChainError
 
 module = sys.modules[__name__]
 
@@ -150,7 +150,7 @@ class TestGrimoire(unittest.TestCase):
             "start -> EtoF:var",
         )
         # except NoChainError:
-        with self.assertRaises(Exception):
+        with self.assertRaises(NoChainError):
             self.grimoire.transmute("start", TYPE_D, [], TYPE_A)
 
         # except NoTransmuterError:

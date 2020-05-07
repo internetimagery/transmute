@@ -52,6 +52,9 @@ struct Searcher<'a> {
     // track where we have been (using u64 hash to skip tranferring ownership)
     visited_in: HashMap<&'a Arc<Edge>, HashMap<u64, Rc<State<'a>>>>,
     visited_out: HashMap<&'a Arc<Edge>, HashMap<u64, Rc<State<'a>>>>,
+
+    // If we need to skip any edges in our search.
+    skip_edges: &'a BTreeSet<&'a Arc<Edge>>,
 }
 
 // Our graph!
@@ -108,6 +111,7 @@ impl<'a> Searcher<'a> {
         hash_var_out: &'a Variations,
         edges_in: &'a HashMap<Int, HashSet<Arc<Edge>>>,
         edges_out: &'a HashMap<Int, HashSet<Arc<Edge>>>,
+        skip_edges: &'a BTreeSet<&'a Arc<Edge>>,
     ) -> Self {
         Searcher {
             edges_in,
@@ -120,13 +124,23 @@ impl<'a> Searcher<'a> {
             queue_out: BinaryHeap::new(),
             visited_in: HashMap::new(),
             visited_out: HashMap::new(),
+            skip_edges,
         }
     }
 
+    /// Look for the cheapest path between converters (edges)
+    /// A chain of types must match. eg A>B  B>C C>D
+    /// Variations are like dependencies on input. They are required
+    /// to satisfy that edges traversal. If an edge does not satisfy
+    /// the right variations, it can be visited again later when it
+    /// the current state has a different set of variations.
     fn search(&mut self) -> Option<Vec<Arc<Edge>>> {
         self.set_queue_in();
         self.set_queue_out();
 
+        // Loop till we run out of options.
+        // Search forward and back at the same time.
+        // Favour the direction with the least number of options.
         loop {
             if !self.queue_in.is_empty() && self.queue_in.len() < self.queue_out.len() {
                 if let Some(result) = self.search_forward() {
@@ -149,6 +163,10 @@ impl<'a> Searcher<'a> {
             Some(Reverse(s)) => s,
             _ => return None,
         };
+
+        if self.skip_edges.contains(&state.edge) {
+            return None;
+        }
 
         // Check if we have reached our goal and variations are all met
         if state.edge.hash_out == self.hash_out && state.variations.is_superset(self.hash_var_out) {
@@ -205,6 +223,10 @@ impl<'a> Searcher<'a> {
             Some(Reverse(s)) => s,
             _ => return None,
         };
+
+        if self.skip_edges.contains(&state.edge) {
+            return None;
+        }
 
         // Check if we have reached our goal and variations dependencies are met
         if state.edge.hash_in == self.hash_in && state.variations.is_subset(self.hash_var_in) {
@@ -376,6 +398,7 @@ impl Graph {
         hash_var_in: &Variations,
         hash_out: Int,
         hash_var_out: &Variations,
+        skip_edges: &BTreeSet<&Arc<Edge>>,
     ) -> Option<Vec<Arc<Edge>>> {
         let mut searcher = Searcher::new(
             hash_in,
@@ -384,6 +407,7 @@ impl Graph {
             hash_var_out,
             &self.edges_in,
             &self.edges_out,
+            skip_edges,
         );
         searcher.search()
     }
