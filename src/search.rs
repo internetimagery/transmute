@@ -1,5 +1,7 @@
 use std::cmp::Reverse;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -47,9 +49,9 @@ struct Searcher<'a> {
     queue_in: BinaryHeap<Reverse<Rc<State<'a>>>>,
     queue_out: BinaryHeap<Reverse<Rc<State<'a>>>>,
 
-    // track where we have been
-    visited_in: HashMap<&'a Arc<Edge>, HashMap<&'a Variations, Rc<State<'a>>>>,
-    visited_out: HashMap<&'a Arc<Edge>, HashMap<&'a Variations, Rc<State<'a>>>>,
+    // track where we have been (using u64 hash to skip tranferring ownership)
+    visited_in: HashMap<&'a Arc<Edge>, HashMap<u64, Rc<State<'a>>>>,
+    visited_out: HashMap<&'a Arc<Edge>, HashMap<u64, Rc<State<'a>>>>,
 }
 
 // Our graph!
@@ -164,7 +166,13 @@ impl<'a> Searcher<'a> {
         // Check if our path intersects the forward search
         if let Some(opposite_states) = self.visited_out.get(&state.edge) {
             for opposite_state in opposite_states.values() {
-                // TODO: Dependency check
+                // Dependency check
+                if !opposite_state.variations.is_subset(match &state.parent {
+                    Some(parent) => &parent.variations,
+                    None => self.hash_var_in,
+                }) {
+                    continue;
+                }
                 return Some(
                     state
                         .iter()
@@ -183,8 +191,8 @@ impl<'a> Searcher<'a> {
         let edge_entry = self.visited_in.entry(state.edge).or_insert(HashMap::new());
         edge_entry.insert(
             match &state.parent {
-                Some(parent) => &parent.variations,
-                None => self.hash_var_in,
+                Some(parent) => hash(&parent.variations),
+                None => hash(&self.hash_var_in),
             },
             Rc::clone(&state),
         );
@@ -199,14 +207,21 @@ impl<'a> Searcher<'a> {
         };
 
         // Check if we have reached our goal and variations dependencies are met
-        if state.edge.hash_in == self.hash_in && state.variations.is_superset(self.hash_var_in) {
+        if state.edge.hash_in == self.hash_in && state.variations.is_subset(self.hash_var_in) {
             return Some(state.iter().map(|s| Arc::clone(&s.edge)).collect());
         }
 
         // Check if our path intersects the forward search
         if let Some(opposite_states) = self.visited_in.get(&state.edge) {
             for opposite_state in opposite_states.values() {
-                // TODO: Dependency check
+                // Dependency check
+                if !state.variations.is_subset(match &opposite_state.parent {
+                    Some(parent) => &parent.variations,
+                    None => self.hash_var_in,
+                }) {
+                    continue;
+                }
+
                 return Some(
                     opposite_state
                         .iter()
@@ -225,8 +240,8 @@ impl<'a> Searcher<'a> {
         let edge_entry = self.visited_out.entry(state.edge).or_insert(HashMap::new());
         edge_entry.insert(
             match &state.parent {
-                Some(parent) => &parent.variations,
-                None => self.hash_var_out,
+                Some(parent) => hash(&parent.variations),
+                None => hash(&self.hash_var_out),
             },
             Rc::clone(&state),
         );
@@ -246,6 +261,8 @@ impl<'a> Searcher<'a> {
                     edge.cost / (edge.hash_var_in.len() + 1) as Int,
                     &edge,
                     None,
+                    // chain method faster?
+                    //self.hash_var_in.difference(&edge.hash_var_in).chain(edge.hash_var_out.iter()).cloned().collect(),
                     &(self.hash_var_in - &edge.hash_var_in) | &edge.hash_var_out,
                 ))))
             }
@@ -269,8 +286,11 @@ impl<'a> Searcher<'a> {
     fn add_queue_in(&mut self, state: Rc<State<'a>>) {
         if let Some(edges) = self.edges_in.get(&state.edge.hash_out) {
             for edge in edges {
-                // TODO: compare against variations too
-                if self.visited_in.contains_key(&edge) {
+                if self
+                    .visited_in
+                    .get(&edge)
+                    .map_or(false, |v| v.contains_key(&hash(&state.variations)))
+                {
                     continue;
                 }
                 // Variation dependency check
@@ -291,8 +311,11 @@ impl<'a> Searcher<'a> {
         // Search further into the graph!
         if let Some(edges) = self.edges_out.get(&state.edge.hash_in) {
             for edge in edges {
-                // TODO: compare with variations as well
-                if self.visited_in.contains_key(&edge) {
+                if self
+                    .visited_out
+                    .get(&edge)
+                    .map_or(false, |v| v.contains_key(&hash(&state.variations)))
+                {
                     continue;
                 }
                 // Check dependencies
@@ -364,4 +387,13 @@ impl Graph {
         );
         searcher.search()
     }
+}
+
+fn hash<H>(hashable: H) -> u64
+where
+    H: Hash,
+{
+    let mut hasher = DefaultHasher::new();
+    hashable.hash(&mut hasher);
+    hasher.finish()
 }
