@@ -167,7 +167,7 @@ py_class!(class Lab |py| {
         // Collect errors.
         // If we run out of paths to take or run out of reties,
         // and there are still errors. Raise with info from all of them.
-        let skip_edges = BTreeSet::new();
+        let mut skip_edges = BTreeSet::new();
         let mut errors = Vec::new();
         'outer: for _ in 0..10 {
             if let Some(edges) = self.graph(py).borrow().search(hash_in, &hash_var_in, hash_out, &hash_var_out, &skip_edges) {
@@ -185,6 +185,11 @@ py_class!(class Lab |py| {
                                     err.instance(py).str(py)?.to_string(py)?,
                                 )
                             );
+                        // Ignore these when trying again.
+                        // This allows some level of failure
+                        // and with enough edges perhaps we
+                        // can find another path.
+                        skip_edges.insert(edge);
                         continue 'outer
                         }
                     }

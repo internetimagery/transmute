@@ -54,7 +54,7 @@ struct Searcher<'a> {
     visited_out: HashMap<&'a Arc<Edge>, HashMap<u64, Rc<State<'a>>>>,
 
     // If we need to skip any edges in our search.
-    skip_edges: &'a BTreeSet<&'a Arc<Edge>>,
+    skip_edges: &'a BTreeSet<Arc<Edge>>,
 }
 
 // Our graph!
@@ -111,7 +111,7 @@ impl<'a> Searcher<'a> {
         hash_var_out: &'a Variations,
         edges_in: &'a HashMap<Int, HashSet<Arc<Edge>>>,
         edges_out: &'a HashMap<Int, HashSet<Arc<Edge>>>,
-        skip_edges: &'a BTreeSet<&'a Arc<Edge>>,
+        skip_edges: &'a BTreeSet<Arc<Edge>>,
     ) -> Self {
         Searcher {
             edges_in,
@@ -164,7 +164,7 @@ impl<'a> Searcher<'a> {
             _ => return None,
         };
 
-        if self.skip_edges.contains(&state.edge) {
+        if self.skip_edges.contains(state.edge) {
             return None;
         }
 
@@ -224,7 +224,7 @@ impl<'a> Searcher<'a> {
             _ => return None,
         };
 
-        if self.skip_edges.contains(&state.edge) {
+        if self.skip_edges.contains(state.edge) {
             return None;
         }
 
@@ -407,7 +407,7 @@ impl Graph {
         hash_var_in: &Variations,
         hash_out: Int,
         hash_var_out: &Variations,
-        skip_edges: &BTreeSet<&Arc<Edge>>,
+        skip_edges: &BTreeSet<Arc<Edge>>,
     ) -> Option<Vec<Arc<Edge>>> {
         let mut searcher = Searcher::new(
             hash_in,
