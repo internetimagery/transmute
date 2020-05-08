@@ -1,6 +1,6 @@
 use cpython::{
-    py_class, py_exception, py_module_initializer, ObjectProtocol, PyDrop, PyErr, PyObject,
-    PyResult, PySequence, PythonObject,
+    py_class, py_exception, py_module_initializer, ObjectProtocol, PyClone, PyDrop, PyErr,
+    PyObject, PyResult, PySequence, PythonObject,
 };
 use search::{Graph, Int};
 use std::cell::RefCell;
@@ -29,44 +29,48 @@ py_module_initializer!(transmute, |py, m| {
         You could be wanting to transmute between a chain of types, or traverse a bunch of object oriented links.
         If you're often thinking \"I have this, how can I get that\", then this type of solution could help.
 
-        >>> grimoire = Grimoire()
-        >>> grimoire.inscribe_transmutation(1, str, [\"href\"], WebPage, [], load_webpage)
-        >>> grimoire.inscribe_detector(str, http_detector)
-        >>> grimoire.transmute(\"http://somewhere.html\", WebPage)
+        >>> lab = Lab()
+        >>> lab.stock_reagent(1, str, [\"href\"], WebPage, [], load_webpage)
+        >>> lab.inscribe_detector(str, http_detector)
+        >>> lab.transmute(\"http://somewhere.html\", WebPage)
     ")?;
-    m.add(py, "TransmuteError", py.get_type::<TransmuteError>())?;
-    m.add(py, "NoChainError", py.get_type::<NoChainError>())?;
-    m.add(py, "ExecutionError", py.get_type::<ExecutionError>())?;
-    m.add_class::<Grimoire>(py)?;
+    m.add(py, "TransmuteFailure", py.get_type::<TransmuteFailure>())?;
+    m.add(
+        py,
+        "LackingReagentFailure",
+        py.get_type::<LackingReagentFailure>(),
+    )?;
+    m.add(py, "CommandFailure", py.get_type::<CommandFailure>())?;
+    m.add_class::<Lab>(py)?;
     Ok(())
 });
 //////////////////////////////////////////////////
 
 //////////////////////////////////////////////////
 // Exceptions
-py_exception!(transmute, TransmuteError); // Root exception
-py_exception!(transmute, NoChainError, TransmuteError);
-py_exception!(transmute, ExecutionError, TransmuteError);
+py_exception!(transmute, TransmuteFailure); // Root exception
+py_exception!(transmute, LackingReagentFailure, TransmuteFailure);
+py_exception!(transmute, CommandFailure, TransmuteFailure);
 //////////////////////////////////////////////////
 
-py_class!(class Grimoire |py| {
+py_class!(class Lab |py| {
     data graph: RefCell<Graph>;
     data functions: RefCell<HashMap<Int, PyObject>>;
-    def __new__(_cls) -> PyResult<Grimoire> {
-        Grimoire::create_instance(
+    def __new__(_cls) -> PyResult<Lab> {
+        Lab::create_instance(
             py,
             RefCell::new(Graph::new()),
             RefCell::new(HashMap::new()),
         )
     }
 
-    /// Write a function into the grimoire so it may be used as a piece in the transmutation chain later.
+    /// Add a function so it may be used as a reagent in the transmutation later.
     /// Eventually a transmutation chain will consist of a number of these placed back to back.
-    /// So the simpler and smaller the transmutation the better.
+    /// So the simpler, smaller and more focused the function the better.
     ///
     /// Args:
     ///     cost:
-    ///         A number representing how much work this transmuter needs to do.
+    ///         A number representing how much work this function needs to do.
     ///         Lower numbers are prioritized.
     ///         eg: just getting an attribute would be a low number. Accessing an http service would be higher etc
     ///     type_in:
@@ -80,17 +84,17 @@ py_class!(class Grimoire |py| {
     ///         eg: str (can be path/href/name/any concept)
     ///     type_out:
     ///         Same as "type_in", but representing the output of the transmutation.
-    ///         NOTE: it is important the transmuter only outputs the stated type (eg error if
+    ///         NOTE: it is important the function only outputs the stated type (eg error if
     ///         otherwise it'd return None)
     ///     variations_out:
     ///         Same as "variations_in" except that variations are descriptive and not dependencies.
     ///         They can satisfy dependencies for transmuters further down the chain.
     ///     function:
-    ///         The transmuter itself. Take a single input, produce a single output.
+    ///         The reagent itself. Take a single input, produce a single output.
     ///         It is important that only an simple transmutation is made, and that any deviation is raised as an Error.
     ///         eg: maybe some attribute is not available and usually you'd return None. There is no strict type
     ///         checking here, so raise an error and bail instead.
-    def inscribe_transmutation(
+    def stock_reagent(
         &self,
         cost: Int,
         type_in: &PyObject,
@@ -164,19 +168,39 @@ py_class!(class Grimoire |py| {
         // If we run out of paths to take or run out of reties,
         // and there are still errors. Raise with info from all of them.
         let skip_edges = BTreeSet::new();
-        for _ in 0..10 {
+        let mut errors = Vec::new();
+        'outer: for _ in 0..10 {
             if let Some(edges) = self.graph(py).borrow().search(hash_in, &hash_var_in, hash_out, &hash_var_out, &skip_edges) {
                 let functions = self.functions(py).borrow();
-                let mut result = value;
+                let mut result = value.clone_ref(py);
                 for edge in edges {
-                    let func = functions.get(&edge.hash_func).expect("Function should exist");
-                    result = func.call(py, (result,), None)?
+                    let func = functions.get(&edge.hash_func).expect("Function is there");
+                    match func.call(py, (result,), None) {
+                        Ok(res) => result = res,
+                        Err(mut err) => {
+                            errors.push(
+                                format!(
+                                    "{}: {}",
+                                    err.get_type(py).name(py),
+                                    err.instance(py).str(py)?.to_string(py)?,
+                                )
+                            );
+                        continue 'outer
+                        }
+                    }
                 }
                 return Ok(result)
             }
         }
-        // TODO: concat errors here, and include in error message (and type)
-        Err(PyErr::new::<NoChainError, _>(py, "Could not do it"))
+        if errors.len() != 0 {
+            Err(PyErr::new::<CommandFailure, _>(py, format!(
+                "Some problems occurred during the transmution process:\n{}",
+                errors.join("\n")
+                )))
+        } else {
+            Err(PyErr::new::<LackingReagentFailure, _>(
+                py, "Could not create a transmutation. Missing some critical reagents. Consider adding more."))
+        }
     }
 
     ///////////////////////////////////////////////////////////////

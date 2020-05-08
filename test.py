@@ -2,7 +2,7 @@ import unittest
 import sys, itertools
 
 sys.path.append("target/release")
-from transmute import Grimoire, NoChainError
+from transmute import Lab, LackingReagentFailure, CommandFailure
 
 module = sys.modules[__name__]
 
@@ -30,23 +30,23 @@ def bad_transmuter(_):
 
 class TestGrimoire(unittest.TestCase):
     def setUp(self):
-        self.grimoire = Grimoire()
+        self.lab = Lab()
 
     def test_basic_graph(self):
         # A - B - C - D
         # |         /
         # E - F - G
 
-        self.grimoire.inscribe_transmutation(1, TYPE_A, [], TYPE_B, [], AtoB())
-        self.grimoire.inscribe_transmutation(1, TYPE_A, [], TYPE_E, [], AtoE())
-        self.grimoire.inscribe_transmutation(1, TYPE_B, [], TYPE_C, [], BtoC())
-        self.grimoire.inscribe_transmutation(1, TYPE_C, [], TYPE_D, [], CtoD())
-        self.grimoire.inscribe_transmutation(1, TYPE_E, [], TYPE_F, [], EtoF())
-        self.grimoire.inscribe_transmutation(1, TYPE_F, [], TYPE_G, [], FtoG())
-        self.grimoire.inscribe_transmutation(1, TYPE_G, [], TYPE_D, [], GtoD())
+        self.lab.stock_reagent(1, TYPE_A, [], TYPE_B, [], AtoB())
+        self.lab.stock_reagent(1, TYPE_A, [], TYPE_E, [], AtoE())
+        self.lab.stock_reagent(1, TYPE_B, [], TYPE_C, [], BtoC())
+        self.lab.stock_reagent(1, TYPE_C, [], TYPE_D, [], CtoD())
+        self.lab.stock_reagent(1, TYPE_E, [], TYPE_F, [], EtoF())
+        self.lab.stock_reagent(1, TYPE_F, [], TYPE_G, [], FtoG())
+        self.lab.stock_reagent(1, TYPE_G, [], TYPE_D, [], GtoD())
 
         self.assertEqual(
-            self.grimoire.transmute("start", TYPE_D, [], TYPE_A),
+            self.lab.transmute("start", TYPE_D, [], TYPE_A),
             "start -> AtoB -> BtoC -> CtoD",
         )
 
@@ -57,14 +57,14 @@ class TestGrimoire(unittest.TestCase):
         #  /         \
         # B           F
 
-        self.grimoire.inscribe_transmutation(1, TYPE_A, [], TYPE_C, [], AtoC())
-        self.grimoire.inscribe_transmutation(1, TYPE_B, [], TYPE_C, [], BtoC())
-        self.grimoire.inscribe_transmutation(1, TYPE_C, [], TYPE_D, [], CtoD())
-        self.grimoire.inscribe_transmutation(1, TYPE_D, [], TYPE_E, [], DtoE())
-        self.grimoire.inscribe_transmutation(1, TYPE_D, [], TYPE_F, [], DtoF())
+        self.lab.stock_reagent(1, TYPE_A, [], TYPE_C, [], AtoC())
+        self.lab.stock_reagent(1, TYPE_B, [], TYPE_C, [], BtoC())
+        self.lab.stock_reagent(1, TYPE_C, [], TYPE_D, [], CtoD())
+        self.lab.stock_reagent(1, TYPE_D, [], TYPE_E, [], DtoE())
+        self.lab.stock_reagent(1, TYPE_D, [], TYPE_F, [], DtoF())
 
         self.assertEqual(
-            self.grimoire.transmute("start", TYPE_F, [], TYPE_A),
+            self.lab.transmute("start", TYPE_F, [], TYPE_A),
             "start -> AtoC -> CtoD -> DtoF",
         )
 
@@ -72,15 +72,15 @@ class TestGrimoire(unittest.TestCase):
 
         # A = B = C'
 
-        self.grimoire.inscribe_transmutation(1, TYPE_A, [], TYPE_B, [], AtoB())
-        self.grimoire.inscribe_transmutation(1, TYPE_B, [], TYPE_A, [], BtoA())
-        self.grimoire.inscribe_transmutation(1, TYPE_B, [], TYPE_C, [], BtoC())
-        self.grimoire.inscribe_transmutation(
+        self.lab.stock_reagent(1, TYPE_A, [], TYPE_B, [], AtoB())
+        self.lab.stock_reagent(1, TYPE_B, [], TYPE_A, [], BtoA())
+        self.lab.stock_reagent(1, TYPE_B, [], TYPE_C, [], BtoC())
+        self.lab.stock_reagent(
             1, TYPE_C, [], TYPE_B, ["var"], CtoB("var")
         )
 
         self.assertEqual(
-            self.grimoire.transmute("start", TYPE_A, ["var"], TYPE_A),
+            self.lab.transmute("start", TYPE_A, ["var"], TYPE_A),
             "start -> AtoB -> BtoC -> CtoB:var -> BtoA",
         )
 
@@ -91,21 +91,21 @@ class TestGrimoire(unittest.TestCase):
         #    \ /     \ /
         #     F'      G
 
-        self.grimoire.inscribe_transmutation(1, TYPE_A, [], TYPE_B, [], AtoB())
-        self.grimoire.inscribe_transmutation(1, TYPE_A, [], TYPE_F, [], AtoF())
-        self.grimoire.inscribe_transmutation(1, TYPE_B, [], TYPE_C, [], BtoC())
-        self.grimoire.inscribe_transmutation(
+        self.lab.stock_reagent(1, TYPE_A, [], TYPE_B, [], AtoB())
+        self.lab.stock_reagent(1, TYPE_A, [], TYPE_F, [], AtoF())
+        self.lab.stock_reagent(1, TYPE_B, [], TYPE_C, [], BtoC())
+        self.lab.stock_reagent(
             2, TYPE_C, [], TYPE_D, ["var2"], CtoD("var2")
         )
-        self.grimoire.inscribe_transmutation(1, TYPE_C, [], TYPE_G, [], CtoG())
-        self.grimoire.inscribe_transmutation(1, TYPE_D, [], TYPE_E, [], DtoE())
-        self.grimoire.inscribe_transmutation(
+        self.lab.stock_reagent(1, TYPE_C, [], TYPE_G, [], CtoG())
+        self.lab.stock_reagent(1, TYPE_D, [], TYPE_E, [], DtoE())
+        self.lab.stock_reagent(
             1, TYPE_F, [], TYPE_C, ["var1"], FtoC("var1")
         )
-        self.grimoire.inscribe_transmutation(1, TYPE_G, [], TYPE_E, [], GtoE())
+        self.lab.stock_reagent(1, TYPE_G, [], TYPE_E, [], GtoE())
 
         self.assertEqual(
-            self.grimoire.transmute("start", TYPE_E, ["var1", "var2"], TYPE_A),
+            self.lab.transmute("start", TYPE_E, ["var1", "var2"], TYPE_A),
             "start -> AtoF -> FtoC:var1 -> CtoD:var2 -> DtoE",
         )
 
@@ -115,20 +115,20 @@ class TestGrimoire(unittest.TestCase):
         #  \  |   |   |
         #   - E - F - G
 
-        self.grimoire.inscribe_transmutation(1, TYPE_A, [], TYPE_B, [], AtoB())
-        self.grimoire.inscribe_transmutation(1, TYPE_B, [], TYPE_C, [], BtoC())
-        self.grimoire.inscribe_transmutation(1, TYPE_B, [], TYPE_E, [], BtoE())
-        self.grimoire.inscribe_transmutation(
+        self.lab.stock_reagent(1, TYPE_A, [], TYPE_B, [], AtoB())
+        self.lab.stock_reagent(1, TYPE_B, [], TYPE_C, [], BtoC())
+        self.lab.stock_reagent(1, TYPE_B, [], TYPE_E, [], BtoE())
+        self.lab.stock_reagent(
             3, TYPE_C, [], TYPE_D, ["var"], CtoD("var")
         )
-        self.grimoire.inscribe_transmutation(1, TYPE_C, [], TYPE_F, [], CtoF())
-        self.grimoire.inscribe_transmutation(1, TYPE_D, [], TYPE_G, [], DtoG())
-        self.grimoire.inscribe_transmutation(1, TYPE_E, [], TYPE_A, [], EtoA())
-        self.grimoire.inscribe_transmutation(1, TYPE_F, [], TYPE_E, [], FtoE())
-        self.grimoire.inscribe_transmutation(1, TYPE_G, [], TYPE_F, [], GtoF())
+        self.lab.stock_reagent(1, TYPE_C, [], TYPE_F, [], CtoF())
+        self.lab.stock_reagent(1, TYPE_D, [], TYPE_G, [], DtoG())
+        self.lab.stock_reagent(1, TYPE_E, [], TYPE_A, [], EtoA())
+        self.lab.stock_reagent(1, TYPE_F, [], TYPE_E, [], FtoE())
+        self.lab.stock_reagent(1, TYPE_G, [], TYPE_F, [], GtoF())
 
         self.assertEqual(
-            self.grimoire.transmute("start", TYPE_A, ["var"], TYPE_A),
+            self.lab.transmute("start", TYPE_A, ["var"], TYPE_A),
             "start -> AtoB -> BtoC -> CtoD:var -> DtoG -> GtoF -> FtoE -> EtoA",
         )
 
@@ -138,28 +138,25 @@ class TestGrimoire(unittest.TestCase):
         # C - D
         # E'- F - G!
 
-        self.grimoire.inscribe_transmutation(1, TYPE_A, [], TYPE_B, [], AtoB())
-        self.grimoire.inscribe_transmutation(1, TYPE_C, [], TYPE_D, [], CtoD())
-        self.grimoire.inscribe_transmutation(
+        self.lab.stock_reagent(1, TYPE_A, [], TYPE_B, [], AtoB())
+        self.lab.stock_reagent(1, TYPE_C, [], TYPE_D, [], CtoD())
+        self.lab.stock_reagent(
             1, TYPE_E, ["var"], TYPE_F, [], EtoF("var")
         )
-        self.grimoire.inscribe_transmutation(1, TYPE_F, [], TYPE_G, [], bad_transmuter)
+        self.lab.stock_reagent(1, TYPE_F, [], TYPE_G, [], bad_transmuter)
 
         self.assertEqual(
-            self.grimoire.transmute("start", TYPE_F, [], TYPE_E, ["var"]),
+            self.lab.transmute("start", TYPE_F, [], TYPE_E, ["var"]),
             "start -> EtoF:var",
         )
-        # except NoChainError:
-        with self.assertRaises(NoChainError):
-            self.grimoire.transmute("start", TYPE_D, [], TYPE_A)
+        with self.assertRaises(LackingReagentFailure):
+            self.lab.transmute("start", TYPE_D, [], TYPE_A)
 
-        # except NoTransmuterError:
-        with self.assertRaises(Exception):
-            self.grimoire.transmute("start", TYPE_F, [], TYPE_E)
+        with self.assertRaises(LackingReagentFailure):
+            self.lab.transmute("start", TYPE_F, [], TYPE_E)
 
-        # except ExecutionError:
-        with self.assertRaises(Exception):
-            self.grimoire.transmute("start", TYPE_G, [], TYPE_F)
+        with self.assertRaises(CommandFailure):
+            self.lab.transmute("start", TYPE_G, [], TYPE_F)
 
 
 if __name__ == "__main__":
