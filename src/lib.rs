@@ -1,6 +1,6 @@
 use cpython::{
     py_class, py_exception, py_module_initializer, ObjectProtocol, PyClone, PyDrop, PyErr,
-    PyObject, PyResult, PySequence, PythonObject,
+    PyIterator, PyObject, PyResult, PySequence, PythonObject,
 };
 use search::{Graph, Int};
 use std::cell::RefCell;
@@ -56,10 +56,12 @@ py_exception!(transmute, CommandFailure, TransmuteFailure);
 py_class!(class Lab |py| {
     data graph: RefCell<Graph>;
     data functions: RefCell<HashMap<Int, PyObject>>;
+    data activators: RefCell<HashMap<Int, Vec<PyObject>>>;
     def __new__(_cls) -> PyResult<Lab> {
         Lab::create_instance(
             py,
             RefCell::new(Graph::new()),
+            RefCell::new(HashMap::new()),
             RefCell::new(HashMap::new()),
         )
     }
@@ -116,6 +118,24 @@ py_class!(class Lab |py| {
         Ok(py.None())
     }
 
+    /// Supply a function that will attempt to apply initial variations automatically.
+    /// This is a convenience aid, to assist in detecting inputs automatically so they do not
+    /// need to be expicitly specified.
+    /// The detector should run quickly so as to keep the entire process smooth.
+    /// ie simple attribute checks, string regex etc
+    ///
+    /// Args:
+    ///     type_in:
+    ///         The type of input this detector accepts.
+    ///     function:
+    ///         Function that takes the value provided (of the type above) and yields any variations it finds.
+    ///         eg: str type could check for link type if the string is http://something.html and
+    ///         yield "protocol" "http"
+    def stock_activator(&self, type_in: &PyObject, function: PyObject) -> PyResult<PyObject> {
+        self.activators(py).borrow_mut().entry(type_in.hash(py)?).or_insert(Vec::new()).push(function);
+        Ok(py.None())
+    }
+
     /// From a given type, attempt to produce a requested type.
     /// OR from some given data, attempt to traverse links to get the requested data.
     ///
@@ -157,11 +177,28 @@ py_class!(class Lab |py| {
             Some(vars) => hash_seq!(py, vars),
             None => BTreeSet::new(),
         };
-        // TODO: handle explicit option when detection is provided
-        let hash_var_in = match variations_have {
-            Some(vars) => hash_seq!(py, vars),
-            None => BTreeSet::new(),
-        };
+        let mut hash_var_in;
+        if explicit {
+            // Explict we want to use specified variations only.
+            hash_var_in = match variations_have {
+                Some(vars) => hash_seq!(py, vars),
+                None => BTreeSet::new(),
+            };
+        } else {
+            // Otherwise run the activator to detect initial variations
+            hash_var_in = match variations_have {
+                Some(vars) => hash_seq!(py, vars),
+                None => BTreeSet::new(),
+            };
+            if let Some(funcs) = self.activators(py).borrow().get(&hash_in) {
+                for func in funcs {
+                    let variations = PyIterator::from_object(py, func.call(py, (value.clone_ref(py),), None)?)?;
+                    for variation in variations {
+                        hash_var_in.insert(variation?.hash(py)?);
+                    }
+                }
+            }
+        }
 
         // Retry a few times, if something breaks along the way.
         // Collect errors.
@@ -210,10 +247,15 @@ py_class!(class Lab |py| {
 
     ///////////////////////////////////////////////////////////////
     // Satisfy python garbage collector
-    // because we hold a reference to the functions provided
+    // because we hold a reference to some functions provided
     def __traverse__(&self, visit) {
         for function in self.functions(py).borrow().values() {
-            visit.call(function)?
+            visit.call(function)?;
+        }
+        for functions in self.activators(py).borrow().values() {
+            for function in functions {
+                visit.call(function)?;
+            }
         }
         Ok(())
     }
@@ -221,6 +263,11 @@ py_class!(class Lab |py| {
     def __clear__(&self) {
         for (_, func) in self.functions(py).borrow_mut().drain() {
             func.release_ref(py);
+        }
+        for (_, mut funcs) in self.activators(py).borrow_mut().drain() {
+            for func in funcs.drain(..) {
+                func.release_ref(py);
+            }
         }
     }
     ///////////////////////////////////////////////////////////////
