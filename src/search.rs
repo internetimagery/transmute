@@ -147,6 +147,7 @@ impl<'a> Searcher<'a> {
                     return Some(result);
                 }
             } else if !self.queue_out.is_empty() {
+                self.queue_out.clear();
                 if let Some(result) = self.search_backward() {
                     return Some(result);
                 }
@@ -280,7 +281,7 @@ impl<'a> Searcher<'a> {
                     continue;
                 }
                 self.queue_in.push(Reverse(Rc::new(State::new(
-                    edge.cost / (edge.hash_var_in.len() + 1) as Int,
+                    edge.cost * (self.hash_var_in.len() - edge.hash_var_in.len() + 1) as Int,
                     &edge,
                     None,
                     // chain method faster?
@@ -296,7 +297,9 @@ impl<'a> Searcher<'a> {
             for edge in edges {
                 self.queue_out.push(Reverse(Rc::new(State::new(
                     edge.cost
-                        / (self.hash_var_out.intersection(&edge.hash_var_out).count() + 1) as Int,
+                        * (self.hash_var_out.len()
+                            - self.hash_var_out.intersection(&edge.hash_var_out).count()
+                            + 1) as Int,
                     &edge,
                     None,
                     &(self.hash_var_out - &edge.hash_var_out) | &edge.hash_var_in,
@@ -324,7 +327,8 @@ impl<'a> Searcher<'a> {
                     continue;
                 }
                 self.queue_in.push(Reverse(Rc::new(State::new(
-                    state.cost + edge.cost / (edge.hash_var_in.len() + 1) as Int,
+                    state.cost
+                        + edge.cost * (state.variations.len() - edge.hash_var_in.len() + 1) as Int,
                     &edge,
                     Some(Rc::clone(&state)),
                     &(&state.variations - &edge.hash_var_in) | &edge.hash_var_out,
@@ -336,6 +340,7 @@ impl<'a> Searcher<'a> {
     fn add_queue_out(&mut self, state: Rc<State<'a>>) {
         // Search further into the graph!
         if let Some(edges) = self.edges_out.get(&state.edge.hash_in) {
+            let max_variations = edges.iter().map(|e| e.hash_var_in.len()).max().unwrap_or(0);
             for edge in edges {
                 if self
                     .visited_out
@@ -356,8 +361,10 @@ impl<'a> Searcher<'a> {
                 self.queue_out.push(Reverse(Rc::new(State::new(
                     state.cost
                         + edge.cost
-                            / (edge.hash_var_out.intersection(&state.variations).count() + 1)
-                                as Int,
+                            * (state.variations.len() + max_variations
+                                - edge.hash_var_out.intersection(&state.variations).count()
+                                - edge.hash_var_in.len()
+                                + 1) as Int,
                     &edge,
                     Some(Rc::clone(&state)),
                     &(&state.variations - &edge.hash_var_out) | &edge.hash_var_in,
@@ -429,4 +436,99 @@ where
     let mut hasher = DefaultHasher::new();
     hashable.hash(&mut hasher);
     hasher.finish()
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    macro_rules! _graph {
+        ( $(($cost:expr, $in:expr, $out:expr, $func:expr)),*) => {
+            {
+                let mut graph = Graph::new();
+                $(
+                    graph.add_edge($cost, $in, BTreeSet::new(), $out, BTreeSet::new(), $func);
+                )*
+                graph
+            }
+        }
+    }
+
+    macro_rules! _setup {
+        ( $searcher:ident, [$in:expr, $out:expr], [$($graph:tt)*], $body:block ) => {
+            {
+            let graph = _graph!($($graph)*);
+            let hash_null = BTreeSet::new();
+            let skip_null = BTreeSet::new();
+            let mut $searcher = Searcher::new(
+                $in,
+                &hash_null,
+                $out,
+                &hash_null,
+                &graph.edges_in,
+                &graph.edges_out,
+                &skip_null,
+            );
+            $searcher.set_queue_in();
+            $searcher.set_queue_out();
+            $body
+            }
+        }
+    }
+
+    #[test]
+    fn test_forward_one_step() {
+        let result = _setup!(s, [1, 2], [(1, 1, 2, 1)], { s.search_forward() }).unwrap();
+        assert_eq!(result[0].hash_func, 1);
+    }
+
+    #[test]
+    fn test_backward_one_step() {
+        let result = _setup!(s, [1, 2], [(1, 1, 2, 1)], { s.search_backward() }).unwrap();
+        assert_eq!(result[0].hash_func, 1);
+    }
+
+    #[test]
+    fn test_forward_two_step() {
+        let result = _setup!(s, [1, 3], [(1, 1, 2, 1), (1, 2, 3, 2)], {
+            s.search_forward();
+            s.search_forward()
+        })
+        .unwrap();
+        assert_eq!(result[0].hash_func, 1);
+        assert_eq!(result[1].hash_func, 2);
+    }
+
+    #[test]
+    fn test_backward_two_step() {
+        let result = _setup!(s, [1, 3], [(1, 1, 2, 1), (1, 2, 3, 2)], {
+            s.search_backward();
+            s.search_backward()
+        })
+        .unwrap();
+        assert_eq!(result[0].hash_func, 1);
+        assert_eq!(result[1].hash_func, 2);
+    }
+
+    #[test]
+    fn test_forward_cheapest() {
+        let result = _setup!(s, [1, 3], [(1, 1, 2, 1), (2, 2, 3, 2), (1, 2, 3, 3)], {
+            s.search_forward();
+            s.search_forward()
+        })
+        .unwrap();
+        assert_eq!(result[0].hash_func, 1);
+        assert_eq!(result[1].hash_func, 3);
+    }
+
+    #[test]
+    fn test_backward_cheapest() {
+        let result = _setup!(s, [1, 3], [(1, 1, 2, 1), (2, 2, 3, 2), (1, 2, 3, 3)], {
+            s.search_backward();
+            s.search_backward()
+        })
+        .unwrap();
+        assert_eq!(result[0].hash_func, 1);
+        assert_eq!(result[1].hash_func, 3);
+    }
 }

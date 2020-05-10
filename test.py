@@ -28,7 +28,11 @@ def bad_transmuter(_):
     raise RuntimeError("BAD STUFF")
 
 
-class TestGrimoire(unittest.TestCase):
+def activator(value):
+    yield "var"
+
+
+class TestLab(unittest.TestCase):
     def setUp(self):
         self.lab = Lab()
 
@@ -49,6 +53,23 @@ class TestGrimoire(unittest.TestCase):
             self.lab.transmute("start", TYPE_D, [], TYPE_A),
             "start -> AtoB -> BtoC -> CtoD",
         )
+
+    def test_activator(self):
+        # A - B - C
+        #  \     /
+        #   - D'-
+
+        self.lab.stock_activator(TYPE_A, activator)
+        self.lab.stock_reagent(1, TYPE_A, [], TYPE_B, [], AtoB())
+        self.lab.stock_reagent(1, TYPE_A, ["var"], TYPE_D, [], AtoD("var"))
+        self.lab.stock_reagent(1, TYPE_B, [], TYPE_C, [], BtoC())
+        self.lab.stock_reagent(1, TYPE_D, [], TYPE_C, [], DtoC())
+
+        self.assertEqual(
+            self.lab.transmute("start", TYPE_C, [], TYPE_A),
+            "start -> AtoD:var -> DtoC",
+        )
+
 
     def test_join_graph(self):
         # A           E

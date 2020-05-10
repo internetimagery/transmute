@@ -66,7 +66,7 @@ py_class!(class Lab |py| {
         )
     }
 
-    /// Add a function so it may be used as a reagent in the transmutation later.
+    /// Add a function so it may be used as a step in the transmutation process later.
     /// Eventually a transmutation chain will consist of a number of these placed back to back.
     /// So the simpler, smaller and more focused the function the better.
     ///
@@ -177,19 +177,13 @@ py_class!(class Lab |py| {
             Some(vars) => hash_seq!(py, vars),
             None => BTreeSet::new(),
         };
-        let mut hash_var_in;
-        if explicit {
-            // Explict we want to use specified variations only.
-            hash_var_in = match variations_have {
-                Some(vars) => hash_seq!(py, vars),
-                None => BTreeSet::new(),
-            };
-        } else {
-            // Otherwise run the activator to detect initial variations
-            hash_var_in = match variations_have {
-                Some(vars) => hash_seq!(py, vars),
-                None => BTreeSet::new(),
-            };
+        let mut hash_var_in = match variations_have {
+            Some(vars) => hash_seq!(py, vars),
+            None => BTreeSet::new(),
+        };
+        if !explicit {
+            // We don't want to be explicit, so
+            // run the activator to detect initial variations
             if let Some(funcs) = self.activators(py).borrow().get(&hash_in) {
                 for func in funcs {
                     let variations = PyIterator::from_object(py, func.call(py, (value.clone_ref(py),), None)?)?;
@@ -199,6 +193,7 @@ py_class!(class Lab |py| {
                 }
             }
         }
+        println!(">> {:?}", hash_var_in);
 
         // Retry a few times, if something breaks along the way.
         // Collect errors.
@@ -229,10 +224,11 @@ py_class!(class Lab |py| {
                         skip_edges.insert(edge);
                         continue 'outer
                         }
-                    }
+                    };
                 }
                 return Ok(result)
             }
+            break
         }
         if errors.len() != 0 {
             Err(PyErr::new::<CommandFailure, _>(py, format!(
