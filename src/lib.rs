@@ -6,6 +6,9 @@ use search::{Graph, Int};
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 mod search;
+#[macro_use]
+extern crate log;
+extern crate env_logger;
 
 // Simple utility, make a hash set out of python sequence
 macro_rules! hash_seq {
