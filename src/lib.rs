@@ -6,9 +6,6 @@ use search::{Graph, Int};
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 mod search;
-#[macro_use]
-extern crate log;
-extern crate env_logger;
 
 // Simple utility, make a hash set out of python sequence
 macro_rules! hash_seq {
@@ -19,6 +16,14 @@ macro_rules! hash_seq {
                 _ => None,
             })
             .collect()
+    };
+}
+// Small utility to log using python logger.
+macro_rules! warn {
+    ($py:expr, $message:expr) => {
+        $py.import("logging")?
+            .call($py, "getLogger", ("transmute",), None)?
+            .call_method($py, "warning", (&$message,), None)?;
     };
 }
 
@@ -212,13 +217,13 @@ py_class!(class Lab |py| {
                     match func.call(py, (result,), None) {
                         Ok(res) => result = res,
                         Err(mut err) => {
-                            errors.push(
-                                format!(
+                            let message = format!(
                                     "{}: {}",
                                     err.get_type(py).name(py),
                                     err.instance(py).str(py)?.to_string(py)?,
-                                )
-                            );
+                                );
+                            warn!(py, message);
+                            errors.push(message);
                         // Ignore these when trying again.
                         // This allows some level of failure
                         // and with enough edges perhaps we

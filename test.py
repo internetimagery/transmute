@@ -177,6 +177,22 @@ class TestLab(unittest.TestCase):
         with self.assertRaises(CommandFailure):
             self.lab.transmute("start", TYPE_G, [], TYPE_F)
 
+    def test_redirect(self):
+
+        # A - B - C
+        #  \     /
+        #   - D!-
+
+        self.lab.stock_reagent(3, TYPE_A, [], TYPE_B, [], AtoB())
+        self.lab.stock_reagent(3, TYPE_B, [], TYPE_C, [], BtoC())
+        self.lab.stock_reagent(1, TYPE_A, [], TYPE_D, [], bad_transmuter)
+        self.lab.stock_reagent(1, TYPE_D, [], TYPE_C, [], DtoC())
+
+        self.assertEqual(
+            self.lab.transmute("start", TYPE_C, [], TYPE_A, []),
+            "start -> AtoB -> BtoC",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

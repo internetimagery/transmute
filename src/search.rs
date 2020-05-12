@@ -177,7 +177,6 @@ impl<'a> Searcher<'a> {
             Some(Reverse(s)) => s,
             _ => return None,
         };
-        debug!(" IN QUEUE > {:?}", state);
 
         if self.skip_edges.contains(state.edge) {
             return None;
@@ -238,7 +237,6 @@ impl<'a> Searcher<'a> {
             Some(Reverse(s)) => s,
             _ => return None,
         };
-        debug!("OUT QUEUE > {:?}", state);
 
         if self.skip_edges.contains(state.edge) {
             return None;
@@ -502,13 +500,8 @@ mod test {
         }
     }
 
-    fn init() {
-        let _ = env_logger::builder().is_test(true).try_init();
-    }
-
     #[test]
     fn test_forward_no_path() {
-        init();
         let result = _setup!(s, [1, {}, 2, {}], [(1, 2, {}, 3, {}, 1)], {
             s.search_forward()
         })
@@ -518,7 +511,6 @@ mod test {
 
     #[test]
     fn test_backward_no_path() {
-        init();
         let result = _setup!(s, [1, {}, 2, {}], [(1, 2, {}, 3, {}, 1)], {
             s.search_backward()
         })
@@ -528,7 +520,6 @@ mod test {
 
     #[test]
     fn test_forward_no_path_variations() {
-        init();
         let result = _setup!(s, [1, {}, 2, {}], [(1, 1, { 1 }, 2, {}, 1)], {
             s.search_forward()
         })
@@ -538,7 +529,6 @@ mod test {
 
     #[test]
     fn test_backward_no_path_variations() {
-        init();
         let result = _setup!(s, [1, {}, 2, {}], [(1, 1, { 1 }, 2, {}, 1)], {
             s.search_backward()
         })
@@ -548,7 +538,6 @@ mod test {
 
     #[test]
     fn test_forward_one_step() {
-        init();
         let result = _setup!(s, [1, {}, 2, {}], [(1, 1, {}, 2, {}, 1)], {
             s.search_forward()
         })
@@ -558,7 +547,6 @@ mod test {
 
     #[test]
     fn test_forward_one_step_variations_in() {
-        init();
         let result = _setup!(s, [1, { 1 }, 2, {}], [(1, 1, { 1 }, 2, {}, 1)], {
             s.search_forward()
         })
@@ -568,7 +556,6 @@ mod test {
 
     #[test]
     fn test_forward_one_step_variations_out() {
-        init();
         let result = _setup!(
             s,
             [1, {}, 2, { 1 }],
@@ -584,7 +571,6 @@ mod test {
 
     #[test]
     fn test_backward_one_step() {
-        init();
         let result = _setup!(s, [1, {}, 2, {}], [(1, 1, {}, 2, {}, 1)], {
             s.search_backward()
         })
@@ -594,7 +580,6 @@ mod test {
 
     #[test]
     fn test_backward_one_step_variations_in() {
-        init();
         let result = _setup!(s, [1, { 1 }, 2, {}], [(1, 1, { 1 }, 2, {}, 1)], {
             s.search_backward()
         })
@@ -604,7 +589,6 @@ mod test {
 
     #[test]
     fn test_backward_one_step_variations_out() {
-        init();
         let result = _setup!(
             s,
             [1, {}, 2, { 1 }],
@@ -620,7 +604,6 @@ mod test {
 
     #[test]
     fn test_forward_two_step() {
-        init();
         let result = _setup!(
             s,
             [1, {}, 3, {}],
@@ -637,7 +620,6 @@ mod test {
 
     #[test]
     fn test_backward_two_step() {
-        init();
         let result = _setup!(
             s,
             [1, {}, 3, {}],
@@ -654,7 +636,6 @@ mod test {
 
     #[test]
     fn test_forward_cheapest() {
-        init();
         let result = _setup!(
             s,
             [1, {}, 3, {}],
@@ -675,7 +656,6 @@ mod test {
 
     #[test]
     fn test_forward_cheapest_variations_in() {
-        init();
         let result = _setup!(
             s,
             [1, { 1 }, 3, {}],
@@ -696,7 +676,6 @@ mod test {
 
     #[test]
     fn test_backward_cheapest() {
-        init();
         let result = _setup!(
             s,
             [1, {}, 3, {}],
@@ -717,7 +696,6 @@ mod test {
 
     #[test]
     fn test_backward_cheapest_variations_in() {
-        init();
         let result = _setup!(
             s,
             [1, { 1 }, 3, {}],
@@ -739,7 +717,6 @@ mod test {
 
     #[test]
     fn test_backward_cheapest_variations_out() {
-        init();
         let result = _setup!(
             s,
             [1, {}, 4, { 1 }],
@@ -764,7 +741,6 @@ mod test {
 
     #[test]
     fn test_forward_intersect() {
-        init();
         let result = _setup!(
             s,
             [1, {}, 4, {}],
@@ -788,7 +764,6 @@ mod test {
 
     #[test]
     fn test_backward_intersect() {
-        init();
         let result = _setup!(
             s,
             [1, {}, 4, {}],
@@ -812,7 +787,6 @@ mod test {
 
     #[test]
     fn test_search_variation() {
-        init();
         let result = _setup!(
             s,
             [1, { 1 }, 3, {}],
