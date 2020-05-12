@@ -24,10 +24,11 @@ pub struct Edge {
 #[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
 pub struct State<'a> {
     cost: Int,
-    actual_cost: Int,
+    var_consumed: Reverse<Int>,
+    var_added: Reverse<Int>,
+    variations: Variations,
     edge: &'a Arc<Edge>,
     parent: Option<Rc<State<'a>>>,
-    variations: Variations,
 }
 
 struct StateIter<'a> {
@@ -65,19 +66,30 @@ pub struct Graph {
 
 impl<'a> State<'a> {
     fn new(
-        cost: Int,
+        mut var_consumed: Int,
+        mut var_added: Int,
         edge: &'a Arc<Edge>,
         parent: Option<Rc<State<'a>>>,
         variations: Variations,
     ) -> Self {
-        let actual_cost = edge.cost
-            + match &parent {
-                Some(p) => p.actual_cost,
-                None => 0,
-            };
+        let cost;
+        match &parent {
+            Some(p) => {
+                cost = p.cost + edge.cost;
+                let Reverse(parent_var_consumed) = p.var_consumed;
+                var_consumed += parent_var_consumed;
+                let Reverse(parent_var_added) = p.var_added;
+                var_added += parent_var_added;
+            }
+            None => {
+                cost = edge.cost;
+            }
+        };
+
         Self {
             cost,
-            actual_cost,
+            var_consumed: Reverse(var_consumed),
+            var_added: Reverse(var_added),
             edge,
             parent,
             variations,
@@ -284,15 +296,15 @@ impl<'a> Searcher<'a> {
                 }
                 // This is a subset so we know it's <= to total
                 // Prioritize nodes that match more of our variations
-                let var_consumed = &(self.hash_var_in - &edge.hash_var_in);
-                let heuristic = 1 + var_consumed.len();
+                let var_consumed = edge.hash_var_in.len();
                 self.queue_in.push(Reverse(Rc::new(State::new(
-                    edge.cost * heuristic as Int,
+                    var_consumed as Int,
+                    edge.hash_var_out.len() as Int,
                     &edge,
                     None,
                     // chain method faster?
                     //self.hash_var_in.difference(&edge.hash_var_in).chain(edge.hash_var_out.iter()).cloned().collect(),
-                    var_consumed | &edge.hash_var_out,
+                    &(self.hash_var_in - &edge.hash_var_in) | &edge.hash_var_out,
                 ))))
             }
         }
@@ -301,13 +313,13 @@ impl<'a> Searcher<'a> {
     fn set_queue_out(&mut self) {
         if let Some(edges) = self.edges_out.get(&self.hash_out) {
             for edge in edges {
-                let var_consumed = &(self.hash_var_out - &edge.hash_var_out);
-                let heuristic = 1 + var_consumed.len();
+                let var_consumed = edge.hash_var_out.intersection(&self.hash_var_out).count();
                 self.queue_out.push(Reverse(Rc::new(State::new(
-                    edge.cost * heuristic as Int,
+                    var_consumed as Int,
+                    edge.hash_var_in.len() as Int,
                     &edge,
                     None,
-                    var_consumed | &edge.hash_var_in,
+                    &(self.hash_var_out - &edge.hash_var_out) | &edge.hash_var_in,
                 ))))
             }
         }
@@ -335,13 +347,13 @@ impl<'a> Searcher<'a> {
                 // Adjust our variations.
                 // Penalize nodes that take less variations.
                 // So we prioritize nodes that are more specific.
-                let var_consumed = &(&state.variations - &edge.hash_var_in);
-                let heuristic = 1 + var_consumed.len();
+                let var_consumed = state.variations.intersection(&edge.hash_var_in).count();
                 self.queue_in.push(Reverse(Rc::new(State::new(
-                    state.actual_cost + edge.cost * heuristic as Int,
+                    var_consumed as Int,
+                    edge.hash_var_out.len() as Int,
                     &edge,
                     Some(Rc::clone(&state)),
-                    var_consumed | &edge.hash_var_out,
+                    &(&state.variations - &edge.hash_var_in) | &edge.hash_var_out,
                 ))));
             }
         }
@@ -361,14 +373,13 @@ impl<'a> Searcher<'a> {
                 // No dependency check going in reverse. As dependencies
                 // could be satisfied further down the chain.
                 // Prioritize nodes that reduce our variation count more
-                let var_consumed = &(&state.variations - &edge.hash_var_out);
-                let heuristic = 1 + var_consumed.len();
-                println!(">> {:?} - {:?} : {:?}", heuristic, edge, state.variations);
+                let var_consumed = state.variations.intersection(&edge.hash_var_out).count();
                 self.queue_out.push(Reverse(Rc::new(State::new(
-                    state.actual_cost + edge.cost * heuristic as Int,
+                    var_consumed as Int,
+                    edge.hash_var_in.len() as Int,
                     &edge,
                     Some(Rc::clone(&state)),
-                    var_consumed | &edge.hash_var_in,
+                    &(&state.variations - &edge.hash_var_out) | &edge.hash_var_in,
                 ))));
             }
         }
@@ -671,10 +682,11 @@ mod test {
             [1, { 1 }, 3, {}],
             [
                 (1, 1, {}, 2, {}, 1),
-                (2, 2, { 1 }, 3, {}, 2),
-                (2, 2, {}, 3, {}, 3)
+                (1, 2, { 1 }, 3, {}, 2),
+                (1, 2, {}, 3, {}, 3)
             ],
             {
+                s.search_backward();
                 s.search_backward();
                 s.search_backward()
             }
@@ -692,11 +704,12 @@ mod test {
             [1, {}, 4, { 1 }],
             [
                 (1, 1, {}, 2, {}, 1),
-                (2, 2, {}, 3, { 1 }, 2),
-                (2, 2, {}, 3, {}, 3),
+                (1, 2, {}, 3, { 1 }, 2),
+                (1, 2, {}, 3, {}, 3),
                 (1, 3, {}, 4, {}, 4)
             ],
             {
+                s.search_backward();
                 s.search_backward();
                 s.search_backward();
                 s.search_backward()
@@ -705,6 +718,6 @@ mod test {
         .unwrap();
         assert_eq!(result[0].hash_func, 1);
         assert_eq!(result[1].hash_func, 2);
-        assert_eq!(result[1].hash_func, 4);
+        assert_eq!(result[2].hash_func, 4);
     }
 }
