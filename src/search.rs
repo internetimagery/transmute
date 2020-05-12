@@ -5,7 +5,8 @@ use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::sync::Arc;
 
-// python int
+// python2 int
+//pub type Int = std::os::raw::c_long;
 pub type Int = isize;
 pub type Variations = BTreeSet<Int>;
 
