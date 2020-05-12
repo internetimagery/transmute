@@ -39,7 +39,7 @@ py_module_initializer!(transmute, |py, m| {
 
         >>> lab = Lab()
         >>> lab.stock_reagent(1, str, [\"href\"], WebPage, [], load_webpage)
-        >>> lab.inscribe_detector(str, http_detector)
+        >>> lab.stock_activator(str, http_activator) # optional convenience
         >>> lab.transmute(\"http://somewhere.html\", WebPage)
     ")?;
     m.add(py, "TransmuteFailure", py.get_type::<TransmuteFailure>())?;
@@ -129,12 +129,12 @@ py_class!(class Lab |py| {
     /// Supply a function that will attempt to apply initial variations automatically.
     /// This is a convenience aid, to assist in detecting inputs automatically so they do not
     /// need to be expicitly specified.
-    /// The detector should run quickly so as to keep the entire process smooth.
+    /// The activator function should run quickly so as to keep the entire process smooth.
     /// ie simple attribute checks, string regex etc
     ///
     /// Args:
     ///     type_in:
-    ///         The type of input this detector accepts.
+    ///         The type of input this function accepts.
     ///     function:
     ///         Function that takes the value provided (of the type above) and yields any variations it finds.
     ///         eg: str type could check for link type if the string is http://something.html and
@@ -164,7 +164,7 @@ py_class!(class Lab |py| {
     ///         transmutation.
     ///     explicit:
     ///         If this is True, the variations_have attribute will entirely override
-    ///         any detected tags. Use this if the detection is bad and you know EXACTLY what you need.
+    ///         any detected tags. Enable this to use precisesly what you specify (no automatic detection).
     /// Returns:
     ///     Any: Whatever the result requested happens to be
     def transmute(
