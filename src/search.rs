@@ -506,6 +506,46 @@ mod test {
     }
 
     #[test]
+    fn test_forward_no_path() {
+        init();
+        let result = _setup!(s, [1, {}, 2, {}], [(1, 2, {}, 3, {}, 1)], {
+            s.search_forward()
+        })
+        .is_some();
+        assert_eq!(result, false);
+    }
+
+    #[test]
+    fn test_backward_no_path() {
+        init();
+        let result = _setup!(s, [1, {}, 2, {}], [(1, 2, {}, 3, {}, 1)], {
+            s.search_backward()
+        })
+        .is_some();
+        assert_eq!(result, false);
+    }
+
+    #[test]
+    fn test_forward_no_path_variations() {
+        init();
+        let result = _setup!(s, [1, {}, 2, {}], [(1, 1, { 1 }, 2, {}, 1)], {
+            s.search_forward()
+        })
+        .is_some();
+        assert_eq!(result, false);
+    }
+
+    #[test]
+    fn test_backward_no_path_variations() {
+        init();
+        let result = _setup!(s, [1, {}, 2, {}], [(1, 1, { 1 }, 2, {}, 1)], {
+            s.search_backward()
+        })
+        .is_some();
+        assert_eq!(result, false);
+    }
+
+    #[test]
     fn test_forward_one_step() {
         init();
         let result = _setup!(s, [1, {}, 2, {}], [(1, 1, {}, 2, {}, 1)], {
@@ -719,5 +759,53 @@ mod test {
         assert_eq!(result[0].hash_func, 1);
         assert_eq!(result[1].hash_func, 2);
         assert_eq!(result[2].hash_func, 4);
+    }
+
+    #[test]
+    fn test_forward_intersect() {
+        init();
+        let result = _setup!(
+            s,
+            [1, {}, 4, {}],
+            [
+                (1, 1, {}, 2, {}, 1),
+                (1, 2, {}, 3, {}, 2),
+                (1, 3, {}, 4, {}, 3)
+            ],
+            {
+                s.search_forward();
+                s.search_forward();
+                s.search_backward();
+                s.search_forward()
+            }
+        )
+        .unwrap();
+        assert_eq!(result[0].hash_func, 1);
+        assert_eq!(result[1].hash_func, 2);
+        assert_eq!(result[2].hash_func, 3);
+    }
+
+    #[test]
+    fn test_backward_intersect() {
+        init();
+        let result = _setup!(
+            s,
+            [1, {}, 4, {}],
+            [
+                (1, 1, {}, 2, {}, 1),
+                (1, 2, {}, 3, {}, 2),
+                (1, 3, {}, 4, {}, 3)
+            ],
+            {
+                s.search_backward();
+                s.search_backward();
+                s.search_forward();
+                s.search_backward()
+            }
+        )
+        .unwrap();
+        assert_eq!(result[0].hash_func, 1);
+        assert_eq!(result[1].hash_func, 2);
+        assert_eq!(result[2].hash_func, 3);
     }
 }
