@@ -15,3 +15,7 @@ crate-type = ["cdylib"]
 [dependencies.cpython]
 version = "0.5"
 features = ["extension-module"]
+
+# If in python 2. Replace features, above with these two lines
+#default-features = false
+#features = ["python27-sys", "extension-module-2-7"]
