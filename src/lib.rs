@@ -1,6 +1,6 @@
 use cpython::{
     py_class, py_exception, py_module_initializer, ObjectProtocol, PyClone, PyDrop, PyErr,
-    PyIterator, PyObject, PyResult, PySequence, PythonObject,
+    PyObject, PyResult, PySequence, PythonObject,
 };
 use search::{Graph, Int};
 use std::cell::RefCell;
@@ -194,8 +194,7 @@ py_class!(class Lab |py| {
             // run the activator to detect initial variations
             if let Some(funcs) = self.activators(py).borrow().get(&hash_in) {
                 for func in funcs {
-                    let variations = PyIterator::from_object(py, func.call(py, (value.clone_ref(py),), None)?)?;
-                    for variation in variations {
+                    for variation in func.call(py, (value.clone_ref(py),), None)?.iter(py)? {
                         hash_var_in.insert(variation?.hash(py)?);
                     }
                 }
