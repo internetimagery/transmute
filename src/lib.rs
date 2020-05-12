@@ -196,7 +196,6 @@ py_class!(class Lab |py| {
                 }
             }
         }
-        println!(">> {:?}", hash_var_in);
 
         // Retry a few times, if something breaks along the way.
         // Collect errors.

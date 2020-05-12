@@ -154,12 +154,13 @@ impl<'a> Searcher<'a> {
         // Search forward and back at the same time.
         // Favour the direction with the least number of options.
         loop {
-            if !self.queue_in.is_empty() && self.queue_in.len() < self.queue_out.len() {
+            if !self.queue_in.is_empty()
+                && (self.queue_in.len() < self.queue_out.len() || self.queue_out.is_empty())
+            {
                 if let Some(result) = self.search_forward() {
                     return Some(result);
                 }
             } else if !self.queue_out.is_empty() {
-                self.queue_out.clear();
                 if let Some(result) = self.search_backward() {
                     return Some(result);
                 }
@@ -807,5 +808,24 @@ mod test {
         assert_eq!(result[0].hash_func, 1);
         assert_eq!(result[1].hash_func, 2);
         assert_eq!(result[2].hash_func, 3);
+    }
+
+    #[test]
+    fn test_search_variation() {
+        init();
+        let result = _setup!(
+            s,
+            [1, { 1 }, 3, {}],
+            [
+                (1, 1, {}, 2, {}, 1),
+                (1, 1, { 1 }, 4, {}, 2),
+                (1, 2, {}, 3, {}, 3),
+                (1, 4, {}, 3, {}, 4)
+            ],
+            { s.search() }
+        )
+        .unwrap();
+        assert_eq!(result[0].hash_func, 2);
+        assert_eq!(result[1].hash_func, 4);
     }
 }

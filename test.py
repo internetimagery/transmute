@@ -28,10 +28,6 @@ def bad_transmuter(_):
     raise RuntimeError("BAD STUFF")
 
 
-def activator(value):
-    yield "var"
-
-
 class TestLab(unittest.TestCase):
     def setUp(self):
         self.lab = Lab()
@@ -59,6 +55,8 @@ class TestLab(unittest.TestCase):
         #  \     /
         #   - D'-
 
+        def activator(_):
+            yield "var"
         self.lab.stock_activator(TYPE_A, activator)
         self.lab.stock_reagent(1, TYPE_A, [], TYPE_B, [], AtoB())
         self.lab.stock_reagent(1, TYPE_A, ["var"], TYPE_D, [], AtoD("var"))
