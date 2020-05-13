@@ -452,10 +452,14 @@ if __name__ == "__main__":
     grimoire.inscribe_transmutation(1, TYPE_F, [], TYPE_G, [], FtoG())
     grimoire.inscribe_transmutation(1, TYPE_G, [], TYPE_D, [], GtoD())
 
-    assert (
-        grimoire.transmute("start", TYPE_D, [], TYPE_A)
-        == "start -> AtoB -> BtoC -> CtoD"
-    )
+    from time import time as now
+    start = now()
+    for _ in range(50000):
+        assert (
+            grimoire.transmute("start", TYPE_D, [], TYPE_A)
+            == "start -> AtoB -> BtoC -> CtoD"
+        )
+    print("Took:", now() - start)
 
     # A           E
     #  \         /
