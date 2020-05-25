@@ -24,6 +24,7 @@ dependencies = [
  "libc",
  "num-traits",
  "paste",
+ "python27-sys",
  "python3-sys",
 ]
 
@@ -89,6 +90,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8872cf6f48eee44265156c111456a700ab3483686b3f96df4cf5481c89157319"
 dependencies = [
  "unicode-xid",
+]
+
+[[package]]
+name = "python27-sys"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "646b6d9b33ff05bab64ed5c154054300613890745b26ef96f4c54a0b55f794d4"
+dependencies = [
+ "libc",
+ "regex",
 ]
 
 [[package]]

@@ -5,9 +5,13 @@ use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::sync::Arc;
 
-// python2 int
-//pub type Int = std::os::raw::c_long;
+#[cfg(feature = "python2")]
+pub type Int = std::os::raw::c_long;
+
+#[cfg(feature = "python3")]
 pub type Int = isize;
+
+
 pub type Variations = BTreeSet<Int>;
 
 // Representing an edge between two nodes

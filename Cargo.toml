@@ -6,7 +6,10 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies]
+[features]
+# Choose one or the other
+python2 = ["cpython/python27-sys", "cpython/extension-module-2-7"]
+python3 = ["cpython/python3-sys", "cpython/extension-module"]
 
 [lib]
 name = "transmute"
@@ -14,8 +17,4 @@ crate-type = ["cdylib"]
 
 [dependencies.cpython]
 version = "0.5"
-features = ["extension-module"]
-
-# If in python 2. Replace features, above with these two lines
-#default-features = false
-#features = ["python27-sys", "extension-module-2-7"]
+default-features = false
